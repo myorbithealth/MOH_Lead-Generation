@@ -19,7 +19,7 @@ _resolver.timeout = 3.0
 def _query(name: str, rtype: str) -> list[str]:
     try:
         return [r.to_text().rstrip(".") for r in _resolver.resolve(name, rtype)]
-    except (dns.exception.DNSException, Exception):
+    except (dns.exception.DNSException, OSError, ValueError):
         return []
 
 
@@ -48,7 +48,7 @@ def lookup(domain: str) -> dict[str, Any]:
     if a:
         try:
             ptr = _query(dns.reversename.from_address(a[0]).to_text(), "PTR")
-        except Exception:
+        except dns.exception.DNSException:
             ptr = []
         out["ptr"] = ptr
     mail = " ".join(out["mx"]).lower()

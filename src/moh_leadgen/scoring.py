@@ -81,7 +81,9 @@ def score_lead(lead: Lead) -> Lead:
         add(-8, "large org, long sales cycle")
     if lead.domain_created:
         try:
-            created = datetime.fromisoformat(lead.domain_created.replace("Z", "+00:00"))
+            created = datetime.fromisoformat(lead.domain_created)
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=UTC)
             age = (datetime.now(UTC) - created).days / 365
             if 1 <= age <= 7:
                 add(4, f"domain age {age:.1f}y (established, still scaling)")

@@ -68,10 +68,7 @@ class PoliteClient:
         rp = self._robots_for(url)
         if rp is None:
             return True
-        try:
-            return rp.can_fetch(self.user_agent, url) and rp.can_fetch("*", url)
-        except Exception:  # pragma: no cover - robotparser quirks
-            return True
+        return rp.can_fetch(self.user_agent, url) and rp.can_fetch("*", url)
 
     # ------------------------------------------------------------------ fetch
     def _throttle(self, url: str) -> None:
