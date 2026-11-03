@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "moh-leadgen"
+version = "0.1.0"
+description = "MyOrbit Health lead-generation toolkit: LegitScript-certified merchants, competitor-platform tenants, and local healthcare businesses, synced to the Lovable Sales Portal and iClosed."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "httpx>=0.27",
+  "beautifulsoup4>=4.12",
+  "lxml>=5.0",
+  "dnspython>=2.6",
+  "tldextract>=5.1",
+  "phonenumbers>=8.13",
+  "typer>=0.12",
+  "rich>=13.7",
+  "pydantic>=2.7",
+  "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+llm = ["anthropic>=0.40"]
+dev = ["pytest>=8.0", "ruff>=0.5"]
+
+[project.scripts]
+leadgen = "moh_leadgen.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/moh_leadgen"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"

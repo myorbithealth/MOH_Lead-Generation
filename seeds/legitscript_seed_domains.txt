@@ -1,0 +1,33 @@
+# LegitScript seed candidates - one domain per line. Everything here is VERIFIED during
+# enrichment (we look for the seal on the site), so unverified guesses are fine to add.
+# Export CSVs from Semrush/Ahrefs ("referring domains of legitscript.com") can be pasted in
+# as-is: only the first comma-separated column is read.
+henrymeds.com
+joinfridays.com
+agelessrx.com
+ro.co
+nextmed.com
+mochihealth.com
+sequence.com
+joinsesame.com
+eden.co
+tryeden.com
+ivim.health
+orderlymeds.com
+weightwatchers.com
+ploshealth.com
+hellomeds.com
+shedrx.com
+limitlessmale.com
+gameday.mens.health
+maximus.co
+hone.health
+rexmd.com
+blokes.co
+joi.co
+peptidesciences.com
+tbmeds.com
+strut.health
+pandahealth.com
+getmaple.com
+circlemedical.com

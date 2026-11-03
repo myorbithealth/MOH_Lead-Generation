@@ -1,0 +1,3 @@
+# Brands known/suspected to run on a competing telehealth platform. Format:
+#   domain, platform
+# The platform column is informational; the pipeline fingerprints the real stack.

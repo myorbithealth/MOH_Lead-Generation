@@ -1,0 +1,1 @@
+# Local med spas / gyms / clinics to enrich directly (one domain per line).
