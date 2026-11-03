@@ -43,7 +43,8 @@ ROLE_WORDS = (
     r"chief [a-z]+ officer|director of [a-z]+|vice president|vp of [a-z]+|general manager|practice manager|lead physician"
 )
 DECISION_RE = re.compile(r"founder|owner|ceo|chief executive|president|managing|partner|medical director|cmo|coo|principal|general manager", re.IGNORECASE)
-NAME_RE = re.compile(r"^(?:Dr\.?\s+)?[A-Z][a-zA-Z'\-]+(?:\s+[A-Z]\.?)?(?:\s+[A-Z][a-zA-Z'\-]+){1,2}(?:,?\s+(?:MD|DO|NP|PA-C|RN|PharmD|PhD|FNP|DNP|APRN|MBA))*$")
+_W = r"[A-Z][a-z'\-]+(?:[A-Z][a-z]+)?"  # Jane, McBride, O'Neil, DeLuca - but not CEO / MD
+NAME_RE = re.compile(rf"^(?:Dr\.?\s+)?{_W}(?:\s+[A-Z]\.?)?(?:\s+{_W}){{1,2}}(?:,?\s+(?:MD|DO|NP|PA-C|RN|PharmD|PhD|FNP|DNP|APRN|MBA))*$")
 _NON_NAME = re.compile(
     r"\b(privacy|policy|terms|contact|about|home|login|sign|book|learn|read|more|our|the|and|team|services?|treatment|"
     r"health|healthcare|clinic|medical|care|center|group|wellness|rights|reserved|llc|inc|how|what|why|when|where|who|"
@@ -53,7 +54,8 @@ _NON_NAME = re.compile(
     r"semaglutide|tirzepatide|testosterone|peptides?|hair|skin|men|women|kids|family|doctor|doctors|physician|"
     r"pharmacy|prescription|consult|consultation|appointment|schedule|discover|explore|see|view|watch|download|"
     r"county|state|states|united|america|american|city|street|avenue|suite|period|mediation|arbitration|agreement|"
-    r"section|court|district|north|south|east|west|central|valley|beach|park|island|coast|national|international)\b",
+    r"section|court|district|north|south|east|west|central|valley|beach|park|island|coast|national|international|"
+    r"ceo|coo|cfo|cto|cmo|president|founder|cofounder|chief|officer|director|manager|partner|owner)\b",
     re.IGNORECASE,
 )
 
@@ -149,6 +151,7 @@ def organization_from_jsonld(objs: list[dict[str, Any]]) -> dict[str, Any]:
         if isinstance(addr, list):
             addr = addr[0] if addr else None
         if isinstance(addr, dict):
+            addr = {k: v for k, v in addr.items() if not (isinstance(v, str) and not re.search(r"[A-Za-z0-9]", v))}
             out.setdefault("street", addr.get("streetAddress"))
             out.setdefault("city", addr.get("addressLocality"))
             out.setdefault("state", addr.get("addressRegion"))
@@ -174,15 +177,15 @@ def people_from_jsonld(objs: list[dict[str, Any]], org: dict[str, Any]) -> list[
             raw.append(obj)
     for item in raw:
         if isinstance(item, str):
-            people.append(Person(name=item, confidence=0.6))
+            people.append(Person(name=htmllib.unescape(item).strip(), confidence=0.6))
         elif isinstance(item, dict) and item.get("name"):
-            title = item.get("jobTitle")
+            title = htmllib.unescape(str(item["jobTitle"])).strip() if item.get("jobTitle") else None
             same = item.get("sameAs") or []
             same = same if isinstance(same, list) else [same]
             linkedin = next((s for s in same if "linkedin.com/in/" in s), None)
             people.append(
                 Person(
-                    name=str(item["name"]).strip(),
+                    name=htmllib.unescape(str(item["name"])).strip(),
                     title=title,
                     email=item.get("email"),
                     linkedin=linkedin,
@@ -252,6 +255,7 @@ def extract_people_heuristic(snapshot: SiteSnapshot) -> list[Person]:
 
     def add(name: str, title: str | None, url: str, conf: float) -> None:
         name = _clean_name(name)
+        name = re.sub(r"\s+(CEO|COO|CFO|CTO|CMO|President|Founder|Co-?founder|Owner|Partner|Director)$", "", name, flags=re.IGNORECASE)
         if not _looks_like_name(name):
             return
         key = name.lower()

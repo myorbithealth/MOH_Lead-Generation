@@ -94,6 +94,9 @@ def score_lead(lead: Lead) -> Lead:
 
     if not lead.pages_crawled:
         add(-25, "site unreachable")
+    redirected = lead.source_detail.get("redirected_to")
+    if redirected and redirected.rsplit(".", 1)[0] != lead.domain.rsplit(".", 1)[0]:
+        add(-15, f"domain redirects to a different brand ({redirected})")
 
     lead.score = max(0, min(100, score))
     lead.score_reasons = reasons

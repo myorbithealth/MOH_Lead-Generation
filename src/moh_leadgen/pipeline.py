@@ -11,6 +11,7 @@ import logging
 from datetime import UTC, datetime
 
 from .config import settings
+from .domains import normalize_domain
 from .enrich import dns_info, extract, hunter, llm, rdap
 from .enrich.legitscript import detect_legitscript, infer_vertical
 from .enrich.site_crawler import crawl_site
@@ -55,6 +56,9 @@ def enrich_lead(lead: Lead, client: PoliteClient, *, use_llm: bool = False, use_
     lead.errors.extend(snap.errors)
     lead.website = snap.final_url
     lead.pages_crawled = [p.url for p in snap.pages]
+    final_domain = normalize_domain(snap.final_url)
+    if final_domain and final_domain != lead.domain:
+        lead.source_detail["redirected_to"] = final_domain
 
     if snap.pages:
         objs = extract.extract_jsonld(snap)
