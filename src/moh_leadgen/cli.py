@@ -85,6 +85,7 @@ def enrich(
     redo: bool = typer.Option(False, help="Re-enrich leads that were already enriched"),
     providers: bool = typer.Option(True, help="Use Apollo/Lusha/Hunter for decision-maker contacts when keys are set"),
     domain: str | None = typer.Option(None, help="Enrich a single domain (added if missing)"),
+    workers: int = typer.Option(4, help="Sites crawled in parallel (each host is still rate-limited)"),
 ):
     """Crawl each lead's site and fill in owner, contacts, LegitScript evidence, tech stack, score."""
     store = _store()
@@ -97,24 +98,33 @@ def enrich(
     if not leads:
         rprint("nothing to enrich")
         return
-    client = PoliteClient()
-    try:
-        for i, lead in enumerate(leads, 1):
-            rprint(f"[{i}/{len(leads)}] {lead.domain}")
-            try:
-                enrich_lead(lead, client, use_llm=llm, use_providers=providers)
-            except Exception as exc:  # keep the batch going
-                logging.getLogger(__name__).exception("enrich failed for %s", lead.domain)
-                lead.errors.append(f"enrich: {exc}")
-                score_lead(lead)
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    def _work(lead: Lead) -> Lead:
+        client = PoliteClient()
+        try:
+            enrich_lead(lead, client, use_llm=llm, use_providers=providers)
+        except Exception as exc:  # keep the batch going
+            logging.getLogger(__name__).exception("enrich failed for %s", lead.domain)
+            lead.errors.append(f"enrich: {exc}")
+            score_lead(lead)
+        finally:
+            client.close()
+        return lead
+
+    done = 0
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        futures = [pool.submit(_work, lead) for lead in leads]
+        for fut in as_completed(futures):
+            lead = fut.result()
             store.save(lead)
+            done += 1
             rprint(
-                f"   score {lead.score:>3}  ls={lead.legitscript.status:<13} vertical={lead.vertical or '-':<20} "
+                f"[{done}/{len(leads)}] {lead.domain}: score {lead.score:>3}  ls={lead.legitscript.status:<13} "
+                f"vertical={lead.vertical or '-':<20} platform={lead.competitor_platform or '-'} "
                 f"owner={lead.owner_name or '-'} email={lead.owner_email or lead.primary_email or '-'}"
                 f"{' (' + lead.owner_email_status + ')' if lead.owner_email_status else ''} phone={lead.owner_phone or lead.primary_phone or '-'}"
             )
-    finally:
-        client.close()
 
 
 @app.command()
@@ -171,7 +181,7 @@ def run(
 ):
     """discover -> enrich -> score -> sync, in one go."""
     discover(tool, discover_limit, seed, opt)
-    enrich(tool, enrich_limit, llm, False, True, None)
+    enrich(tool, enrich_limit, llm, False, True, None, 4)
     if push and settings.supabase_url and settings.supabase_key:
         sync("portal", min_score, tool, Path("out/leads.csv"), False)
     else:

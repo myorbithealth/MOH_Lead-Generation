@@ -28,16 +28,20 @@ class SeedFileDiscovery(DiscoverySource):
             line = raw.split("#", 1)[0].strip()
             if not line:
                 continue
-            token = line.split(",", 1)[0].strip()
+            parts = [t.strip() for t in line.split(",")]
+            token = parts[0]
             domain = normalize_domain(token)
             if not domain or domain in seen or is_junk(domain):
                 continue
             seen.add(domain)
+            detail = dict(self.detail)
+            if len(parts) > 1 and parts[1]:
+                detail["platform"] = parts[1]
             yield Candidate(
                 domain=domain,
                 source=self.source,
                 discovered_via=f"seedfile:{self.path.name}",
-                source_detail=dict(self.detail),
+                source_detail=detail,
             )
             count += 1
             if limit and count >= limit:
