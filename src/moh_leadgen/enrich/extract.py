@@ -109,7 +109,8 @@ _NON_NAME = re.compile(
     r"pharmacy|prescription|consult|consultation|appointment|schedule|discover|explore|see|view|watch|download|"
     r"county|state|states|united|america|american|city|street|avenue|suite|period|mediation|arbitration|agreement|"
     r"section|court|district|north|south|east|west|central|valley|beach|park|island|coast|national|international|"
-    r"ceo|coo|cfo|cto|cmo|president|founder|cofounder|chief|officer|director|manager|partner|owner)\b",
+    r"ceo|coo|cfo|cto|cmo|president|founder|cofounder|chief|officer|director|manager|partner|owner|admin|"
+    r"urologist|dermatologist|physician|nurse|practitioner|dietitian|coach|clinic|spa|eat|okay|ok)\b",
     re.IGNORECASE,
 )
 
@@ -231,8 +232,9 @@ def people_from_jsonld(objs: list[dict[str, Any]], org: dict[str, Any]) -> list[
             raw.append(obj)
     for item in raw:
         if isinstance(item, str):
-            people.append(Person(name=htmllib.unescape(item).strip(), confidence=0.6))
-        elif isinstance(item, dict) and item.get("name"):
+            if _looks_like_name(item):
+                people.append(Person(name=htmllib.unescape(item).strip(), confidence=0.6))
+        elif isinstance(item, dict) and item.get("name") and _looks_like_name(str(item["name"])):
             title = htmllib.unescape(str(item["jobTitle"])).strip() if item.get("jobTitle") else None
             same = item.get("sameAs") or []
             same = same if isinstance(same, list) else [same]
@@ -296,7 +298,7 @@ def _clean_name(s: str) -> str:
 
 def _looks_like_name(s: str) -> bool:
     s = _clean_name(s)
-    if len(s) < 5 or len(s) > 60:
+    if len(s) < 5 or len(s) > 60 or "@" in s or s == s.lower() or "http" in s.lower():
         return False
     if _NON_NAME.search(s):
         return False
