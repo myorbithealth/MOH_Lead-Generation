@@ -37,6 +37,8 @@ class Settings:
     google_cse_cx: str = field(default_factory=lambda: _env("GOOGLE_CSE_CX"))
     bing_key: str = field(default_factory=lambda: _env("BING_SEARCH_KEY"))
     semrush_key: str = field(default_factory=lambda: _env("SEMRUSH_API_KEY"))
+    publicwww_key: str = field(default_factory=lambda: _env("PUBLICWWW_API_KEY"))
+    nerdydata_key: str = field(default_factory=lambda: _env("NERDYDATA_API_KEY"))
 
     # Enrichment providers
     hunter_key: str = field(default_factory=lambda: _env("HUNTER_API_KEY"))

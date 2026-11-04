@@ -95,3 +95,11 @@ def test_normalize_domain():
     assert normalize_domain("https://www.Example.com/path?x=1") == "example.com"
     assert normalize_domain("mailto:joe@sub.example.co.uk") == "example.co.uk"
     assert normalize_domain("not a domain") is None
+
+
+def test_rimo_and_bask_fingerprints():
+    rimo = '<img src="https://larp-cdn.com/pp/store/PDm2bRTVON8jDCq_NwyYQ/branding/rimo-mark.png">'
+    assert fingerprint(rimo)[1] == "Rimo"
+    bask = '<script src="https://checkout.bask.health/embed.js"></script>'
+    assert fingerprint(bask)[1] == "Bask Health"
+    assert fingerprint("<p>plain page</p>")[1] is None

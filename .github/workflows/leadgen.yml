@@ -33,6 +33,7 @@ jobs:
       LUSHA_API_KEY: ${{ secrets.LUSHA_API_KEY }}
       GOOGLE_PLACES_API_KEY: ${{ secrets.GOOGLE_PLACES_API_KEY }}
       SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
+      PUBLICWWW_API_KEY: ${{ secrets.PUBLICWWW_API_KEY }}
       LEADGEN_BOOKING_URL: ${{ vars.LEADGEN_BOOKING_URL }}
       LEADGEN_DB: leads.db
       LEADGEN_MAX_PAGES_PER_SITE: "6"

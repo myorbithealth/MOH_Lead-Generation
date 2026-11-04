@@ -11,8 +11,10 @@ import re
 # name -> (is_competitor, [regexes matched against raw HTML + resolved CNAME chain])
 FINGERPRINTS: dict[str, tuple[bool, list[str]]] = {
     # --- telehealth / DTC-care infrastructure (MyOrbit Health competitors) ---
-    "Bask Health": (True, [r"bask\.health", r"baskhealth\.com", r"cdn\.bask", r"bask-?(?:checkout|widget|embed)"]),
-    "Rimo": (True, [r"rimo\.(?:health|io|com|app)", r"rimohealth", r"\brimo-(?:embed|widget|checkout)"]),
+    # Verified 2026-11: Rimo storefronts load assets from larp-cdn.com and /pp/store/<id>/branding/ paths,
+    # and tenants live on <brand>.rimo.health; Bask serves tenants from its *.bask.health apps.
+    "Rimo": (True, [r"larp-cdn\.com", r"/pp/store/[A-Za-z0-9_\-]+/", r"[a-z0-9\-]+\.rimo\.health", r"rimo\.co/", r"rimo-(?:mark|wordmark)"]),
+    "Bask Health": (True, [r"(?:checkout|app|api|analytics|cdn|pg)\.bask\.health", r"data-basky", r"baskhealth\.com", r"bask-?(?:checkout|widget|embed)", r"powered by bask"]),
     "Healthie": (True, [r"gethealthie\.com", r"healthie\.(?:io|com)", r"secure\.gethealthie"]),
     "OpenLoop": (True, [r"openloophealth\.com", r"openloop\.(?:health|com)"]),
     "Wheel": (True, [r"wheel\.com", r"wheelhealth"]),

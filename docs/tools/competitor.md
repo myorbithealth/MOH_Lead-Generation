@@ -4,6 +4,18 @@
 OpenLoop, Beluga Health, MD Integrations, Qualiphy, Wheel). They have validated the model; the
 pitch is a better/cheaper/more complete stack.
 
+## What was verified (Nov 2026)
+
+* **Rimo** (rimo.co, legacy rimo.health): tenant storefronts live on `<brand>.rimo.health` and on
+  custom domains; every storefront loads assets from **`larp-cdn.com`** and
+  `/pp/store/<id>/branding/` paths. That string is unique to Rimo, so a source-code search for
+  `larp-cdn.com` lists Rimo's customers directly.
+* **Bask Health** (bask.health): tenant apps are served from Bask's `*.bask.health` services and
+  carry Bask's server-side tagging (`analytics.bask.health`) and `data-basky-*` attributes.
+  Bask's IPs are Vercel's shared edge, so reverse-IP lookups return every Vercel site, not Bask
+  customers; use the HTML markers instead.
+* Plain reverse DNS (PTR records) identifies the hosting provider only. It never lists tenants.
+
 ## "Reverse lookup" techniques
 
 1. **Certificate transparency (crt.sh)** - platforms that host tenants on subdomains
@@ -13,8 +25,11 @@ pitch is a better/cheaper/more complete stack.
 3. **Fingerprints during enrichment** - `enrich/tech.py` matches script/CSS/iframe hostnames and
    the DNS CNAME chain (`checkout.brand.com → platform CNAME`). This also catches custom-domain
    tenants discovered by any other tool, which is why every lead gets `competitor_platform`.
-4. **Reverse IP / ASN** - add a provider (SecurityTrails, Shodan, BuiltWith) as a
-   `DiscoverySource` if you have a key; the hook is `discovery/base.py`.
+4. **Source-code search engines** (`discovery/sourcesearch.py`) - PublicWWW or NerdyData index
+   the HTML of hundreds of millions of sites; searching for the markers above returns the tenant
+   list in one call. This is the tool to buy for this job (PublicWWW from ~$49/month; BuiltWith
+   "sites using technology X" is the enterprise alternative).
+5. **Reverse IP / ASN** - only useful for platforms on dedicated IPs; Bask and Rimo are not.
 
 ## Running
 

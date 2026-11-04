@@ -7,12 +7,15 @@ from .overpass import OverpassDiscovery
 from .search import SearchDiscovery, build_search_provider
 from .seedfile import SeedFileDiscovery
 from .semrush import SemrushAdvertisersDiscovery, SemrushBacklinksDiscovery
+from .sourcesearch import NerdyDataDiscovery, PublicWWWDiscovery
 
 __all__ = [
     "CommonCrawlDiscovery",
     "CrtShDiscovery",
     "DiscoverySource",
+    "NerdyDataDiscovery",
     "OverpassDiscovery",
+    "PublicWWWDiscovery",
     "SearchDiscovery",
     "SeedFileDiscovery",
     "SemrushAdvertisersDiscovery",

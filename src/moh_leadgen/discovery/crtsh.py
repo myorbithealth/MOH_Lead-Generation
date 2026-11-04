@@ -18,7 +18,7 @@ from .base import DiscoverySource
 
 log = logging.getLogger(__name__)
 
-_IGNORED_LABELS = re.compile(r"^(www|api|app|staging|stage|dev|test|cdn|static|mail|smtp|admin|docs|status|demo|sandbox|\*)\.")
+_IGNORED_LABELS = re.compile(r"^(www|api|app|staging|stage|dev|test|cdn|static|mail|smtp|admin|docs|status|demo|sandbox|analytics|otel|pg|qr|feedback|franchise|\*)\.|-demo\.|\.demo\.")
 
 
 class CrtShDiscovery(DiscoverySource):
