@@ -1,0 +1,73 @@
+name: Lead generation
+
+# Runs every Monday 06:00 UTC and on demand. Discovers + enriches + scores, uploads a CSV,
+# and pushes to the Sales Portal when SUPABASE_SERVICE_ROLE_KEY is configured as a repo secret.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      tool:
+        description: "legitscript | competitor | local | all"
+        default: "all"
+      discover_limit:
+        description: "New candidates per tool"
+        default: "150"
+      enrich_limit:
+        description: "Leads to enrich per tool"
+        default: "80"
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      SUPABASE_URL: ${{ vars.SUPABASE_URL || 'https://zrrndxdnopvgspyhrsxh.supabase.co' }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      HUNTER_API_KEY: ${{ secrets.HUNTER_API_KEY }}
+      GOOGLE_PLACES_API_KEY: ${{ secrets.GOOGLE_PLACES_API_KEY }}
+      SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
+      LEADGEN_BOOKING_URL: ${{ vars.LEADGEN_BOOKING_URL }}
+      LEADGEN_DB: leads.db
+      LEADGEN_MAX_PAGES_PER_SITE: "6"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e ".[llm]"
+      - name: Restore lead store
+        uses: actions/cache@v4
+        with:
+          path: leads.db
+          key: leads-db-${{ github.run_id }}
+          restore-keys: leads-db-
+      - name: Run tools
+        shell: bash
+        run: |
+          TOOL="${{ github.event.inputs.tool || 'all' }}"
+          DL="${{ github.event.inputs.discover_limit || '150' }}"
+          EL="${{ github.event.inputs.enrich_limit || '80' }}"
+          LLM=""; [ -n "$ANTHROPIC_API_KEY" ] && LLM="--llm"
+          for t in legitscript competitor local; do
+            if [ "$TOOL" = "all" ] || [ "$TOOL" = "$t" ]; then
+              leadgen discover "$t" --limit "$DL" || true
+              leadgen enrich "$t" --limit "$EL" $LLM || true
+            fi
+          done
+          leadgen stats
+          leadgen top --n 30
+          mkdir -p out
+          leadgen sync csv --all --out out/leads.csv
+      - name: Sync to Sales Portal
+        if: env.SUPABASE_SERVICE_ROLE_KEY != ''
+        run: leadgen sync portal --min-score 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: leads-${{ github.run_number }}
+          path: out/leads.csv

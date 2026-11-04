@@ -4,11 +4,11 @@ A set of lead-generation tools that feed the **MyOrbit Health Sales Portal** (Lo
 rep sees LegitScript merchants, competitor-platform tenants and local clinics side by side,
 ranked by fit, each with an owner name, email, phone and a personalised booking link.
 
-| Tool | What it finds | Discovery sources |
+| Tool | What it finds | Discovery sources (★ = free, no key) |
 |---|---|---|
-| `legitscript` | Businesses displaying the **LegitScript certification seal** (telehealth, pharmacy, weight loss, TRT, peptides, med spas, addiction treatment) | seed list, search-engine dorks, Semrush backlinks of legitscript.com, Semrush advertisers on regulated keywords |
-| `competitor` | Brands already running on a **competing telehealth platform** (Bask Health, Rimo, Healthie, OpenLoop, Beluga, MD Integrations, Qualiphy, Wheel) | certificate transparency (crt.sh), search dorks, seed list, DNS CNAME + HTML fingerprints |
-| `local` | **Med spas, gyms, clinics, IV bars, weight-loss and hormone clinics** by city | Google Places text search, seed list |
+| `legitscript` | Businesses displaying the **LegitScript certification seal** (telehealth, pharmacy, weight loss, TRT, peptides, med spas, addiction treatment) | ★ seed list, ★ Wayback Machine + Common Crawl indexes of LegitScript verify links, search dorks (Claude web search / SerpAPI / Google CSE / Bing), Semrush (optional) |
+| `competitor` | Brands already running on a **competing telehealth platform** (Bask Health, Rimo, Healthie, OpenLoop, Beluga, MD Integrations, Qualiphy, Wheel) | ★ certificate transparency (crt.sh), ★ seed list, search dorks, ★ DNS CNAME + HTML fingerprints |
+| `local` | **Med spas, gyms, clinics, IV bars, weight-loss and hormone clinics** by city | ★ OpenStreetMap (Nominatim + Overpass), ★ seed list, Google Places (optional) |
 
 Shared enrichment for every candidate:
 
@@ -37,18 +37,34 @@ leadgen show henrymeds.com                     # everything we know about one le
 leadgen promote henrymeds.com                  # create company + contact + deal in the portal
 ```
 
-Nothing is required beyond Python: with no API keys the LegitScript tool runs from the seed list
-and verifies/enriches each site directly. Keys unlock more discovery and better owner data:
+### Zero-key mode
+
+Nothing is required beyond Python. With no keys at all, the LegitScript tool pulls every domain
+behind an archived LegitScript verify link (Wayback Machine + Common Crawl), the competitor tool
+reads certificate-transparency logs, the local tool reads OpenStreetMap, and every candidate is
+crawled, verified and scored directly. Owner *names* come from the sites themselves.
+
+### One-key mode (recommended)
+
+Add **`ANTHROPIC_API_KEY`** and two things switch on: Claude's web search runs the discovery
+dorks (no SerpAPI/Bing needed) and Claude reads each crawled site to extract decision-makers,
+company size and a pitch angle. This is the single key worth adding.
 
 | Key | Unlocks |
 |---|---|
-| `SERPAPI_KEY` / `GOOGLE_CSE_KEY`+`GOOGLE_CSE_CX` / `BING_SEARCH_KEY` | search-dork discovery (any one) |
-| `SEMRUSH_API_KEY` | backlinks of legitscript.com + advertisers on regulated keywords (needs API units) |
-| `GOOGLE_PLACES_API_KEY` | `local` tool discovery |
-| `HUNTER_API_KEY` | named mailboxes + email pattern |
-| `ANTHROPIC_API_KEY` | Claude reads the crawled pages and extracts decision-makers, size, pitch angle |
-| `SUPABASE_SERVICE_ROLE_KEY` | sync to the Sales Portal |
-| `LEADGEN_BOOKING_URL` | personalised booking links on every lead |
+| `ANTHROPIC_API_KEY` | search-dork discovery via Claude web search + AI extraction of owners/executives |
+| `SUPABASE_SERVICE_ROLE_KEY` | `leadgen sync portal` (Lovable Cloud → Settings → API, secret key) |
+| `HUNTER_API_KEY` | named mailboxes + the company's email pattern (best source of owner emails) |
+| `GOOGLE_PLACES_API_KEY` | much deeper `local` coverage than OpenStreetMap |
+| `SERPAPI_KEY` / `GOOGLE_CSE_KEY`+`GOOGLE_CSE_CX` / `BING_SEARCH_KEY` | alternative search providers |
+| `SEMRUSH_API_KEY` | optional extra discovery (needs API units) |
+
+### Hands-off: GitHub Actions
+
+`.github/workflows/leadgen.yml` runs every Monday (and on demand from the Actions tab): discover →
+enrich → score → CSV artifact → sync to the Sales Portal. To turn it on, add repository secrets
+`SUPABASE_SERVICE_ROLE_KEY` and (recommended) `ANTHROPIC_API_KEY`; optionally `HUNTER_API_KEY`,
+`GOOGLE_PLACES_API_KEY`, and the `LEADGEN_BOOKING_URL` variable. Nothing else to configure.
 
 ## How it connects to the Sales Portal
 

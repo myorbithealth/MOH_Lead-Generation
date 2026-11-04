@@ -113,6 +113,52 @@ class BingProvider(SearchProvider):
         return hits[:max_results]
 
 
+class AnthropicSearchProvider(SearchProvider):
+    """Claude's built-in web search tool - the same ANTHROPIC_API_KEY that powers AI extraction.
+
+    One request per query; Claude runs the search server-side and we read the result URLs
+    straight off the `web_search_tool_result` block, so the model's prose is irrelevant.
+    """
+
+    name = "claude_web_search"
+
+    def __init__(self, api_key: str | None = None):
+        import anthropic
+
+        self.client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
+
+    def search(self, query: str, *, max_results: int = 30) -> list[SearchHit]:
+        import anthropic
+
+        try:
+            r = self.client.messages.create(
+                model="claude-opus-5-5",
+                max_tokens=2000,
+                output_config={"effort": "low"},
+                tools=[{"type": "web_search_20260209", "name": "web_search", "max_uses": 3}],
+                messages=[{
+                    "role": "user",
+                    "content": f"Run a web search for exactly this query and reply with one line: done.\n\n{query}",
+                }],
+            )
+        except anthropic.APIStatusError as exc:
+            log.warning("claude web search failed for %r: %s", query, exc)
+            return []
+        hits: list[SearchHit] = []
+        for block in r.content:
+            if block.type != "web_search_tool_result":
+                continue
+            content = block.content
+            if not isinstance(content, list):  # error object, e.g. max_uses_exceeded
+                log.warning("claude web search error: %s", getattr(content, "error_code", content))
+                continue
+            for item in content:
+                url = getattr(item, "url", None)
+                if url:
+                    hits.append(SearchHit(url, getattr(item, "title", "") or "", ""))
+        return hits[:max_results]
+
+
 def build_search_provider() -> SearchProvider | None:
     if settings.serpapi_key:
         return SerpApiProvider(settings.serpapi_key)
@@ -120,6 +166,11 @@ def build_search_provider() -> SearchProvider | None:
         return GoogleCseProvider(settings.google_cse_key, settings.google_cse_cx)
     if settings.bing_key:
         return BingProvider(settings.bing_key)
+    if settings.anthropic_key:
+        try:
+            return AnthropicSearchProvider(settings.anthropic_key)
+        except ImportError:
+            log.warning("ANTHROPIC_API_KEY is set but the anthropic package is missing: pip install -e '.[llm]'")
     return None
 
 

@@ -2,16 +2,21 @@
 
 from .base import DiscoverySource
 from .crtsh import CrtShDiscovery
+from .free_index import CommonCrawlDiscovery, WaybackDiscovery
+from .overpass import OverpassDiscovery
 from .search import SearchDiscovery, build_search_provider
 from .seedfile import SeedFileDiscovery
 from .semrush import SemrushAdvertisersDiscovery, SemrushBacklinksDiscovery
 
 __all__ = [
+    "CommonCrawlDiscovery",
     "CrtShDiscovery",
     "DiscoverySource",
+    "OverpassDiscovery",
     "SearchDiscovery",
     "SeedFileDiscovery",
     "SemrushAdvertisersDiscovery",
     "SemrushBacklinksDiscovery",
+    "WaybackDiscovery",
     "build_search_provider",
 ]

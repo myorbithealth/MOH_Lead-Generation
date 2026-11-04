@@ -5,11 +5,12 @@ pharmacy and addiction-treatment services on Google/Meta. A business that paid f
 (a) real, (b) compliance-aware and (c) spending on acquisition - exactly who needs
 white-label telehealth infrastructure to scale.
 
-Discovery stack (all optional, more = more coverage):
+Discovery stack, in order (the first two need no keys at all):
   1. seed file          seeds/legitscript_seed_domains.txt (hand-curated + exports)
-  2. search dorks       pages that embed the seal / mention certification (SerpAPI / Google CSE / Bing)
-  3. Semrush backlinks  referring domains of legitscript.com (= sites linking from the seal)
-  4. Semrush ads        advertisers on regulated healthcare keywords (certification is a Google prerequisite)
+  2. Wayback / Common Crawl  archived LegitScript verify-link URLs -> the domains behind every seal
+  3. search dorks       pages that embed the seal / mention certification
+                        (Claude web search with ANTHROPIC_API_KEY, or SerpAPI / Google CSE / Bing)
+  4. Semrush            backlinks of legitscript.com + advertisers on regulated keywords (optional)
 Verification happens in the pipeline: we look for the seal on the merchant's own site.
 """
 
@@ -18,10 +19,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..discovery import (
+    CommonCrawlDiscovery,
     SearchDiscovery,
     SeedFileDiscovery,
     SemrushAdvertisersDiscovery,
     SemrushBacklinksDiscovery,
+    WaybackDiscovery,
 )
 from ..discovery.base import DiscoverySource
 from .base import Tool
@@ -74,6 +77,8 @@ class LegitScriptTool(Tool):
         seed = self.seed_file or DEFAULT_SEED
         return [
             SeedFileDiscovery(seed, source=self.source),
+            WaybackDiscovery(source=self.source),
+            CommonCrawlDiscovery(source=self.source),
             SearchDiscovery(SEARCH_DORKS, source=self.source, per_query=int(self.options.get("per_query", 30))),
             SemrushBacklinksDiscovery("legitscript.com", source=self.source),
             SemrushAdvertisersDiscovery(AD_KEYWORDS, source=self.source),

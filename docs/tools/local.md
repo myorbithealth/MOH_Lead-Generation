@@ -5,17 +5,20 @@ city - businesses with patients and cash flow but no telehealth program.
 
 ## Discovery
 
-Google Places *Text Search (New)* across `DEFAULT_CATEGORIES × DEFAULT_CITIES`
-(`tools/local_business.py`). Each place that has a website becomes a candidate; the Places name,
-phone, address, rating and review count are kept in `source_detail`.
+1. **OpenStreetMap** (free, default): each city is geocoded with Nominatim, then an Overpass query
+   returns clinics, doctors, med spas / beauty, gyms, pharmacies, physio and weight-loss practices
+   that publish a `website` tag (`discovery/overpass.py`, categories in `CATEGORY_FILTERS`).
+2. **Google Places Text Search (New)** (optional, `GOOGLE_PLACES_API_KEY`): far deeper coverage
+   across `DEFAULT_CATEGORIES × DEFAULT_CITIES` in `tools/local_business.py`.
 
 ```bash
-leadgen discover local --opt "categories=med spa,IV hydration therapy" --opt "cities=Austin, TX;Dallas, TX"
+leadgen discover local --opt "cities=Austin, TX;Dallas, TX" --opt "osm_categories=clinic,med_spa,gym"
+leadgen discover local --opt "categories=med spa,IV hydration therapy" --opt "cities=Austin, TX"   # Places
 leadgen enrich local --limit 100
 ```
 
-Cost control: each (category, city) pair is up to 3 requests (60 results). The defaults are
-18 categories × 36 cities ≈ 2k requests; narrow with `--opt` for a test run.
+Cost control (Places): each (category, city) pair is up to 3 requests (60 results); the defaults
+are 18 categories × 36 cities ≈ 2k requests, so narrow with `--opt` for a test run.
 
 ## Scoring notes
 

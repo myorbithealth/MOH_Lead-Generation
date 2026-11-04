@@ -1,8 +1,8 @@
 """Tool 3: local healthcare & wellness businesses (med spas, gyms, clinics, IV bars...).
 
-Discovery via Google Places Text Search (New) across a city list - these businesses have
-customers and cash flow but no telehealth program, which is the upsell.
-Needs GOOGLE_PLACES_API_KEY. The enrichment pipeline is identical to the other tools.
+Discovery across a city list - these businesses have customers and cash flow but no telehealth
+program, which is the upsell. OpenStreetMap (free, no key) runs by default; Google Places Text
+Search (New) adds much deeper coverage when GOOGLE_PLACES_API_KEY is set.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from pathlib import Path
 import httpx
 
 from ..config import settings
-from ..discovery import SeedFileDiscovery
+from ..discovery import OverpassDiscovery, SeedFileDiscovery
 from ..discovery.base import DiscoverySource
 from ..domains import is_junk, normalize_domain
 from ..models import Candidate
@@ -122,7 +122,9 @@ class LocalBusinessTool(Tool):
     def discovery_sources(self) -> list[DiscoverySource]:
         cats = [c.strip() for c in self.options.get("categories", "").split(",") if c.strip()] or DEFAULT_CATEGORIES
         cities = [c.strip() for c in self.options.get("cities", "").split(";") if c.strip()] or DEFAULT_CITIES
+        osm_cats = [c.strip() for c in self.options.get("osm_categories", "").split(",") if c.strip()] or None
         return [
             SeedFileDiscovery(self.seed_file or DEFAULT_SEED, source=self.source),
+            OverpassDiscovery(cities, osm_cats, source=self.source),
             GooglePlacesDiscovery(cats, cities, source=self.source),
         ]

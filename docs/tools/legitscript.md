@@ -15,9 +15,11 @@ certified merchant has (1) passed a real compliance review, (2) is spending on p
 | Source | Needs | Notes |
 |---|---|---|
 | `seeds/legitscript_seed_domains.txt` | nothing | Append any list; verification happens later |
-| Search dorks (`SEARCH_DORKS` in `tools/legitscript.py`) | SerpAPI, Google CSE or Bing key | Pages that say "LegitScript certified" / embed the seal |
-| Semrush `backlinks_refdomains` of legitscript.com | Semrush key + API units | The seal links to legitscript.com, so referring domains ≈ seal holders. Highest-yield source. |
-| Semrush `phrase_adwords_historical` on regulated keywords | Semrush key + API units | Advertisers on "semaglutide online", "trt online", ... |
+| Wayback Machine CDX (`discovery/free_index.py`) | nothing | Every archived `legitscript.com/websites/?checker_keywords=<domain>` URL - i.e. the verify link behind a seal. Thousands of domains, refreshed as the archive crawls. |
+| Common Crawl index | nothing | Same URL pattern across the last few monthly crawls |
+| Search dorks (`SEARCH_DORKS` in `tools/legitscript.py`) | `ANTHROPIC_API_KEY` (Claude web search) or SerpAPI / Google CSE / Bing | Pages that say "LegitScript certified" / embed the seal |
+| Semrush `backlinks_refdomains` of legitscript.com | Semrush key + API units | Optional |
+| Semrush `phrase_adwords_historical` on regulated keywords | Semrush key + API units | Optional |
 
 ## Verification
 
