@@ -26,6 +26,16 @@ from .base import Tool
 
 DEFAULT_SEED = Path("seeds/competitor_platform_seed_domains.txt")
 
+# Domains owned by the platforms themselves (marketing, demo, staging, status). Never leads.
+PLATFORM_OWNED = {
+    "bask.health", "baskhealth.com", "mybaskhealth.com", "bask.host", "dev-bask.com", "staging-bask.com", "bask.blue",
+    "bask.network", "bask.works", "bask.plus", "bask.fyi", "dorf.today",
+    "rimo.co", "rimo.health", "rimohealth.com", "getrimo.com", "larp-cdn.com",
+    "gethealthie.com", "openloophealth.com", "belugahealth.com", "belugacareapp.online", "yourbelugaapp.com",
+    "mdintegrations.com", "qualiphy.me", "doctegrity.com", "doctegrity.vip", "doctegrityportal.com",
+    "steadymd.com", "wheel.com", "techstars.com",
+}
+
 # Source-code markers unique to each platform's storefront HTML (what source-search engines look for).
 SOURCE_MARKERS: dict[str, str] = {
     "Rimo": "larp-cdn.com",
@@ -63,6 +73,9 @@ class CompetitorPlatformTool(Tool):
     name = "competitor"
     source = "competitor_platform"
     description = "Brands already running on competing telehealth infrastructure"
+
+    def keep_candidate(self, domain: str) -> bool:
+        return domain not in PLATFORM_OWNED
 
     def discovery_sources(self) -> list[DiscoverySource]:
         only = self.options.get("platform")
