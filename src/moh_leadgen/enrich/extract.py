@@ -255,7 +255,7 @@ def extract_people_heuristic(snapshot: SiteSnapshot) -> list[Person]:
 
     def add(name: str, title: str | None, url: str, conf: float) -> None:
         name = _clean_name(name)
-        name = re.sub(r"\s+(CEO|COO|CFO|CTO|CMO|President|Founder|Co-?founder|Owner|Partner|Director)$", "", name, flags=re.IGNORECASE)
+        name = re.sub(r"\s+(CEO|COO|CFO|CTO|CMO|President|Founder|Co-?founder|Owner|Partner|Director|Co)$", "", name, flags=re.IGNORECASE)
         if not _looks_like_name(name):
             return
         key = name.lower()
