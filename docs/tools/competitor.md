@@ -41,3 +41,11 @@ leadgen top --tool competitor
 
 Add a platform: append to `COMPETITORS` in `tools/competitor_platform.py` and a fingerprint row
 in `enrich/tech.py`.
+
+## PublicWWW inside Claude Code
+
+`.mcp.json` at the repo root registers PublicWWW's MCP server, so any Claude Code session in this
+repo can run source searches, save tenant lists as clusters, extract contacts from their pages and
+run `build_signatures` to discover new platform markers. Export `PUBLICWWW_TOKEN` (the API token
+from https://publicwww.com/profile/api) in your shell before starting Claude Code; the token is
+never written to the repo. The Python pipeline uses the same token via `PUBLICWWW_API_KEY`.
