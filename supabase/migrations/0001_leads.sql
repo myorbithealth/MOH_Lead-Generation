@@ -16,7 +16,10 @@ create table if not exists public.leads (
   owner_name            text,
   owner_title           text,
   owner_email           text,
+  owner_email_status    text,                           -- verified | provider | on_site | guessed
+  owner_phone           text,
   owner_linkedin        text,
+  email_pattern         text,
   people                jsonb not null default '[]'::jsonb,
   emails                jsonb not null default '[]'::jsonb,
   phones                jsonb not null default '[]'::jsonb,

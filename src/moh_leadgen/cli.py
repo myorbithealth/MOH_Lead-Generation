@@ -83,6 +83,7 @@ def enrich(
     limit: int = typer.Option(25, help="How many leads to enrich this run"),
     llm: bool = typer.Option(False, help="Use Claude to extract decision-makers (needs ANTHROPIC_API_KEY)"),
     redo: bool = typer.Option(False, help="Re-enrich leads that were already enriched"),
+    providers: bool = typer.Option(True, help="Use Apollo/Lusha/Hunter for decision-maker contacts when keys are set"),
     domain: str | None = typer.Option(None, help="Enrich a single domain (added if missing)"),
 ):
     """Crawl each lead's site and fill in owner, contacts, LegitScript evidence, tech stack, score."""
@@ -101,7 +102,7 @@ def enrich(
         for i, lead in enumerate(leads, 1):
             rprint(f"[{i}/{len(leads)}] {lead.domain}")
             try:
-                enrich_lead(lead, client, use_llm=llm)
+                enrich_lead(lead, client, use_llm=llm, use_providers=providers)
             except Exception as exc:  # keep the batch going
                 logging.getLogger(__name__).exception("enrich failed for %s", lead.domain)
                 lead.errors.append(f"enrich: {exc}")
@@ -109,7 +110,8 @@ def enrich(
             store.save(lead)
             rprint(
                 f"   score {lead.score:>3}  ls={lead.legitscript.status:<13} vertical={lead.vertical or '-':<20} "
-                f"owner={lead.owner_name or '-'} email={lead.owner_email or lead.primary_email or '-'} phone={lead.primary_phone or '-'}"
+                f"owner={lead.owner_name or '-'} email={lead.owner_email or lead.primary_email or '-'}"
+                f"{' (' + lead.owner_email_status + ')' if lead.owner_email_status else ''} phone={lead.owner_phone or lead.primary_phone or '-'}"
             )
     finally:
         client.close()
@@ -169,7 +171,7 @@ def run(
 ):
     """discover -> enrich -> score -> sync, in one go."""
     discover(tool, discover_limit, seed, opt)
-    enrich(tool, enrich_limit, llm, False, None)
+    enrich(tool, enrich_limit, llm, False, True, None)
     if push and settings.supabase_url and settings.supabase_key:
         sync("portal", min_score, tool, Path("out/leads.csv"), False)
     else:

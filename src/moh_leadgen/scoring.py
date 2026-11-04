@@ -58,12 +58,14 @@ def score_lead(lead: Lead) -> Lead:
     # Reachability
     if lead.owner_name:
         add(12, f"decision-maker identified: {lead.owner_name}" + (f" ({lead.owner_title})" if lead.owner_title else ""))
-    if lead.owner_email and not lead.source_detail.get("owner_email_guessed"):
-        add(10, "decision-maker email found")
+    if lead.owner_email and lead.owner_email_status in ("verified", "provider", "on_site"):
+        add(12, f"decision-maker email ({lead.owner_email_status})")
     elif lead.owner_email:
-        add(4, "decision-maker email guessed from pattern")
+        add(4, "decision-maker email guessed from company pattern")
     elif lead.primary_email:
-        add(5, "business email found")
+        add(2, "only a role mailbox found")
+    if lead.owner_phone:
+        add(8, "decision-maker direct phone")
     if lead.primary_phone:
         add(6, "phone number found")
     if lead.owner_linkedin:

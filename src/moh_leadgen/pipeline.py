@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 
 from .config import settings
 from .domains import normalize_domain
-from .enrich import dns_info, extract, hunter, llm, rdap
+from .enrich import dns_info, extract, llm, people_data, rdap
 from .enrich.legitscript import detect_legitscript, infer_vertical
 from .enrich.site_crawler import crawl_site
 from .enrich.tech import fingerprint
@@ -34,7 +34,9 @@ def _merge_people(*groups: list[Person]) -> list[Person]:
                 continue
             cur.title = cur.title or p.title
             cur.email = cur.email or p.email
+            cur.email_status = cur.email_status or p.email_status
             cur.phone = cur.phone or p.phone
+            cur.phone_type = cur.phone_type or p.phone_type
             cur.linkedin = cur.linkedin or p.linkedin
             cur.confidence = max(cur.confidence, p.confidence)
             cur.is_decision_maker = cur.is_decision_maker or p.is_decision_maker
@@ -50,7 +52,7 @@ def booking_link(lead: Lead) -> str | None:
     return f"{base}{sep}utm_source=leadgen&utm_medium={lead.source}&utm_campaign={lead.vertical or 'general'}&utm_content={lead.domain}"
 
 
-def enrich_lead(lead: Lead, client: PoliteClient, *, use_llm: bool = False, use_hunter: bool = True) -> Lead:
+def enrich_lead(lead: Lead, client: PoliteClient, *, use_llm: bool = False, use_providers: bool = True) -> Lead:
     lead.errors = []
     snap = crawl_site(lead.domain, client)
     lead.errors.extend(snap.errors)
@@ -95,15 +97,6 @@ def enrich_lead(lead: Lead, client: PoliteClient, *, use_llm: bool = False, use_
         ld_people = extract.people_from_jsonld(objs, org)
         groups = [ld_people, heur_people]
 
-        if use_hunter and settings.hunter_key:
-            h_people, h_generic, pattern = hunter.domain_search(lead.domain)
-            groups.append(h_people)
-            for e in h_generic:
-                if e not in lead.emails:
-                    lead.emails.append(e)
-            if pattern:
-                lead.source_detail["email_pattern"] = pattern
-
         if use_llm and llm.available():
             result = llm.extract(snap)
             if result:
@@ -115,17 +108,36 @@ def enrich_lead(lead: Lead, client: PoliteClient, *, use_llm: bool = False, use_
                 lead.vertical = meta.get("vertical") or lead.vertical
 
         lead.people = _merge_people(*groups)
+
+        # 1. Personal mailboxes published on the site -> attach to the matching person.
+        personal = extract.personal_mailboxes(lead.emails)
+        for p in lead.people:
+            first, last = (p.name.replace("Dr.", "").split() + ["", ""])[:2]
+            for e in personal:
+                local = e.split("@")[0].lower()
+                if first and (local.startswith(first.lower()) or (last and last.lower() in local)):
+                    p.email, p.email_status = p.email or e, p.email_status or "on_site"
+        lead.email_pattern = extract.infer_email_pattern(lead.emails, lead.people)
+
+        # 2. Licensed people-data providers (Apollo / Lusha / Hunter) for the top decision-makers.
+        if use_providers:
+            lead.people, providers = people_data.enrich_decision_makers(lead.people, lead.domain)
+            if providers:
+                lead.source_detail["contact_providers"] = providers
+
         best = lead.best_person()
         if best and (best.is_decision_maker or best.confidence >= 0.6):
             lead.owner_name, lead.owner_title = best.name, best.title
-            lead.owner_email, lead.owner_linkedin = best.email, best.linkedin
-            # If the pattern is known and the owner has no mailbox yet, propose one (flagged as guessed).
-            pattern = lead.source_detail.get("email_pattern")
-            if not best.email and pattern and " " in best.name:
-                first, last = best.name.split()[0].lower(), best.name.split()[-1].lower()
-                guess = pattern.replace("{first}", first).replace("{last}", last).replace("{f}", first[:1]).replace("{l}", last[:1])
-                lead.owner_email = f"{guess}@{lead.domain}"
-                lead.source_detail["owner_email_guessed"] = True
+            lead.owner_linkedin, lead.owner_phone = best.linkedin, best.phone
+            if best.email:
+                lead.owner_email, lead.owner_email_status = best.email, best.email_status or "provider"
+            elif lead.email_pattern:
+                guess = extract.apply_email_pattern(lead.email_pattern, best.name, lead.domain)
+                if guess:
+                    lead.owner_email, lead.owner_email_status = guess, "guessed"
+                    best.email, best.email_status = guess, "guessed"
+        if lead.owner_email_status == "guessed":
+            lead.source_detail["owner_email_guessed"] = True
 
     dns_facts = dns_info.lookup(lead.domain)
     lead.has_mx = dns_facts.get("has_mx")

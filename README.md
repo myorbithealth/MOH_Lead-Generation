@@ -54,7 +54,7 @@ company size and a pitch angle. This is the single key worth adding.
 |---|---|
 | `ANTHROPIC_API_KEY` | search-dork discovery via Claude web search + AI extraction of owners/executives |
 | `SUPABASE_SERVICE_ROLE_KEY` | `leadgen sync portal` (Lovable Cloud → Settings → API, secret key) |
-| `HUNTER_API_KEY` | named mailboxes + the company's email pattern (best source of owner emails) |
+| `APOLLO_API_KEY` / `LUSHA_API_KEY` / `HUNTER_API_KEY` | founders' real emails, mobiles and LinkedIn (see below) |
 | `GOOGLE_PLACES_API_KEY` | much deeper `local` coverage than OpenStreetMap |
 | `SERPAPI_KEY` / `GOOGLE_CSE_KEY`+`GOOGLE_CSE_CX` / `BING_SEARCH_KEY` | alternative search providers |
 | `SEMRUSH_API_KEY` | optional extra discovery (needs API units) |
@@ -65,6 +65,28 @@ company size and a pitch angle. This is the single key worth adding.
 enrich → score → CSV artifact → sync to the Sales Portal. To turn it on, add repository secrets
 `SUPABASE_SERVICE_ROLE_KEY` and (recommended) `ANTHROPIC_API_KEY`; optionally `HUNTER_API_KEY`,
 `GOOGLE_PLACES_API_KEY`, and the `LEADGEN_BOOKING_URL` variable. Nothing else to configure.
+
+## Real decision-maker contacts: which software you need
+
+Websites only publish role mailboxes (info@, support@). Founders' direct emails, mobile numbers
+and LinkedIn profiles come from licensed B2B contact databases, so the pipeline plugs into three.
+Add any one key and `leadgen enrich` fills `owner_email`, `owner_phone`, `owner_linkedin` and the
+`people` list automatically; each email carries a status (`verified`, `provider`, `on_site`, `guessed`).
+
+| Provider | What it gives | Plan to get | Env var |
+|---|---|---|---|
+| **Apollo.io** (recommended first) | People search by company domain + title → names, titles, **LinkedIn URLs**; enrichment → **verified work email**; mobile numbers via async webhook | Free plan includes API access with monthly credits; Basic plan for volume | `APOLLO_API_KEY` (+ `APOLLO_PHONE_WEBHOOK_URL` for mobiles) |
+| **Lusha** | **Direct dials / mobiles** and work emails by name + domain, synchronous | Free tier (few credits) → Pro | `LUSHA_API_KEY` |
+| **Hunter.io** | Email finder (name + domain → email + confidence), email verifier, company email pattern | Free 25 searches/month → Starter | `HUNTER_API_KEY` |
+
+Recommended setup: **Apollo for people + LinkedIn + email, Lusha for phones.** If you only buy one,
+buy Apollo. ZoomInfo, Clay, Kaspr and RocketReach do the same job; add an adapter in
+`enrich/people_data.py` if you prefer one of them.
+
+Without any provider the pipeline still (a) attaches personal mailboxes found on the site to the
+matching person, (b) infers the company's email pattern from them and (c) proposes the owner's
+address from that pattern, flagged `guessed` and scored lower. Verify guessed addresses before
+sending (Hunter's verifier is wired in).
 
 ## How it connects to the Sales Portal
 

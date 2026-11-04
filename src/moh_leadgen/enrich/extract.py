@@ -18,6 +18,60 @@ EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 OBFUSCATED_EMAIL_RE = re.compile(r"([A-Za-z0-9._%+-]+)\s*(?:\[at\]|\(at\)|\{at\}| at )\s*([A-Za-z0-9.-]+)\s*(?:\[dot\]|\(dot\)|\{dot\}| dot )\s*([A-Za-z]{2,})", re.IGNORECASE)
 _EMAIL_JUNK = re.compile(r"(example\.|sentry|wixpress|\.png$|\.jpg$|\.gif$|\.svg$|\.webp$|@2x|noreply|no-reply|donotreply)", re.IGNORECASE)
 _GENERIC_LOCALPARTS = ("info", "hello", "contact", "support", "admin", "office", "team", "sales", "care", "help", "frontdesk", "appointments")
+GENERIC_LOCAL_RE = re.compile(
+    r"^(info|hello|hi|contact|support|help|care|team|sales|admin|office|press|media|pr|legal|privacy|security|careers|jobs|"
+    r"billing|compliance|marketing|partnerships?|partners|feedback|customer\.?service|customercare|concierge|members?|patients?|"
+    r"clinical\w*|hcp\w*|research|accessibility|ask|ayuda|webmaster|noreply|no-reply|donotreply|orders?|shop|store|"
+    r"frontdesk|appointments?|scheduling|booking|reception|enquiries|inquiries|questions|dpo|abuse|postmaster|hostmaster|"
+    r"newsletter|news|events|investors?|ir|affiliates?|wholesale|returns|refunds|shipping|accounts?|accounting|finance|hr|"
+    r"recruiting|talent|[a-z]+-privacy|[a-z]*privacy[a-z]*|[a-z]*support[a-z]*|[a-z]*service[a-z]*|[a-z]*team[a-z]*)$",
+    re.IGNORECASE,
+)
+
+
+def is_generic_mailbox(email: str) -> bool:
+    local = email.split("@", 1)[0]
+    return bool(GENERIC_LOCAL_RE.match(local)) or "+" in local or local.startswith(".") or len(local) < 2
+
+
+def personal_mailboxes(emails: list[str]) -> list[str]:
+    return [e for e in emails if not is_generic_mailbox(e)]
+
+
+def infer_email_pattern(emails: list[str], people: list[Person]) -> str | None:
+    """Work out the company's mailbox convention from any personal mailbox + known names."""
+    names = [(p.name.replace("Dr.", "").split()) for p in people]
+    names = [(n[0].lower(), n[-1].lower()) for n in names if len(n) >= 2]
+    for email in personal_mailboxes(emails):
+        local = email.split("@", 1)[0].lower()
+        for first, last in names:
+            f, l = first[:1], last[:1]
+            candidates = {
+                "{first}.{last}": f"{first}.{last}", "{first}{last}": f"{first}{last}", "{f}{last}": f"{f}{last}",
+                "{first}_{last}": f"{first}_{last}", "{first}": first, "{f}.{last}": f"{f}.{last}", "{last}": last,
+                "{first}{l}": f"{first}{l}", "{last}.{first}": f"{last}.{first}", "{last}{first}": f"{last}{first}",
+            }
+            for pattern, value in candidates.items():
+                if local == value:
+                    return pattern
+    # No name match: a bare single-word local part strongly suggests {first}
+    for email in personal_mailboxes(emails):
+        local = email.split("@", 1)[0].lower()
+        if local.isalpha() and 3 <= len(local) <= 12:
+            return "{first}"
+    return None
+
+
+def apply_email_pattern(pattern: str, name: str, domain: str) -> str | None:
+    parts = [p for p in name.replace("Dr.", "").replace(",", " ").split() if p[:1].isalpha()]
+    parts = [p for p in parts if p.upper() not in ("MD", "DO", "NP", "RN", "PHD", "PA-C", "PHARMD", "MBA", "DNP", "FNP")]
+    if len(parts) < 2:
+        return None
+    first, last = re.sub(r"[^a-z]", "", parts[0].lower()), re.sub(r"[^a-z]", "", parts[-1].lower())
+    if not first or not last:
+        return None
+    local = pattern.replace("{first}", first).replace("{last}", last).replace("{f}", first[0]).replace("{l}", last[0])
+    return f"{local}@{domain}"
 
 SOCIAL_HOSTS = {
     "linkedin.com": "linkedin",

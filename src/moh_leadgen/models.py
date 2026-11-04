@@ -31,7 +31,9 @@ class Person(BaseModel):
     name: str
     title: str | None = None
     email: str | None = None
+    email_status: str | None = None  # verified | provider | on_site | guessed
     phone: str | None = None
+    phone_type: str | None = None  # mobile | work | office
     linkedin: str | None = None
     source_url: str | None = None
     confidence: float = 0.5
@@ -63,7 +65,10 @@ class Lead(BaseModel):
     owner_name: str | None = None
     owner_title: str | None = None
     owner_email: str | None = None
+    owner_email_status: str | None = None  # verified | provider | on_site | guessed
+    owner_phone: str | None = None
     owner_linkedin: str | None = None
+    email_pattern: str | None = None  # e.g. {first}.{last}
 
     emails: list[str] = Field(default_factory=list)
     phones: list[str] = Field(default_factory=list)
@@ -117,7 +122,10 @@ class Lead(BaseModel):
             "owner_name": self.owner_name,
             "owner_title": self.owner_title,
             "owner_email": self.owner_email,
+            "owner_email_status": self.owner_email_status,
+            "owner_phone": self.owner_phone,
             "owner_linkedin": self.owner_linkedin,
+            "email_pattern": self.email_pattern,
             "people": [p.model_dump(mode="json") for p in self.people],
             "emails": self.emails,
             "phones": self.phones,
