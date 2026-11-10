@@ -85,6 +85,8 @@ def enrich_lead(lead: Lead, client: PoliteClient, *, use_llm: bool = False, use_
             lead.address = extract.extract_address_text(snap)
         lead.socials = extract.extract_socials(snap)
         for url in org.get("sameAs", []) or []:
+            if not isinstance(url, str):
+                continue
             for host, key in extract.SOCIAL_HOSTS.items():
                 if host in url and key not in lead.socials:
                     lead.socials[key] = url

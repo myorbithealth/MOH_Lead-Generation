@@ -130,7 +130,7 @@ def extract_emails(snapshot: SiteSnapshot, domain: str) -> list[str]:
     root = domain.removeprefix("www.")
     out = []
     for addr, _ in counts.most_common():
-        if _EMAIL_JUNK.search(addr):
+        if "@" not in addr or _EMAIL_JUNK.search(addr):
             continue
         addr_domain = addr.split("@", 1)[1]
         # Prefer same-domain addresses; keep others only if they look like real mailboxes.
