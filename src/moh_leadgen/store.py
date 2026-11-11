@@ -97,12 +97,17 @@ class LeadStore:
         min_score: int | None = None,
         unsynced_only: bool = False,
         limit: int | None = None,
+        platform: str | None = None,
     ) -> Iterator[Lead]:
         sql = "select data from leads where 1=1"
         args: list = []
         if source:
             sql += " and source=?"
             args.append(source)
+        if platform:
+            # the seeding platform (source_detail.platform) or the fingerprinted one
+            sql += " and (json_extract(data,'$.source_detail.platform') like ? or json_extract(data,'$.competitor_platform') like ?)"
+            args += [f"{platform}%", f"{platform}%"]
         if enriched is not None:
             sql += " and enriched=?"
             args.append(1 if enriched else 0)

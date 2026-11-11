@@ -86,6 +86,7 @@ def enrich(
     providers: bool = typer.Option(True, help="Use Apollo/Lusha/Hunter for decision-maker contacts when keys are set"),
     domain: str | None = typer.Option(None, help="Enrich a single domain (added if missing)"),
     workers: int = typer.Option(4, help="Sites crawled in parallel (each host is still rate-limited)"),
+    platform: str | None = typer.Option(None, help="Only candidates seeded for / fingerprinted as this platform (prefix match)"),
 ):
     """Crawl each lead's site and fill in owner, contacts, LegitScript evidence, tech stack, score."""
     store = _store()
@@ -94,7 +95,9 @@ def enrich(
         lead = store.get(domain) or Lead(domain=domain, source=source or "manual", discovered_via="cli")
         leads = [lead]
     else:
-        leads = list(store.iter(source=source, enriched=None if redo else False, limit=limit))
+        leads = list(
+            store.iter(source=source, enriched=None if redo else False, limit=limit, platform=platform)
+        )
     if not leads:
         rprint("nothing to enrich")
         return
