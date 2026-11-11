@@ -16,6 +16,19 @@ pitch is a better/cheaper/more complete stack.
   customers; use the HTML markers instead.
 * Plain reverse DNS (PTR records) identifies the hosting provider only. It never lists tenants.
 
+* **WhiteLabel MD**: tenants embed an intake iframe (`intake_placement`) and a `tracking_start()`
+  snippet, and post answers to `api.whitelabelmd.com`. The iframe marker alone finds ~130 sites.
+* **Telegra MD**: WordPress tenants load the `telemdnow` plugin stylesheet; Shopify tenants load
+  `integration-<brand>.telegramd.com/telegraApp-script.js`; certificate logs list every integration
+  as `integration-<brand>.telegramd.com` or `<brand>.affiliates.commerce.telegramd.com`.
+* **Karpa**: tenants sit on custom domains and link only to karpahealth.com; most also use RxAve
+  (`rxave.health`) for fulfilment, which is the better search key.
+* **CareValidate**: tenants call `api.care360-next.carevalidate.com` (`careValidateApiUrl`).
+* **Cuvo**: tenant storefronts are `<brand>.med.cuvo.co` behind a wildcard certificate; no embed
+  marker leaks to custom domains, so discovery relies on "Cuvo Health" mentions.
+* Lesson: when a platform's domain string finds few sites, build a cluster from the known tenants
+  and run PublicWWW `build_signatures`; a shared snippet usually finds 5-10x more.
+
 ## "Reverse lookup" techniques
 
 1. **Certificate transparency (crt.sh)** - platforms that host tenants on subdomains

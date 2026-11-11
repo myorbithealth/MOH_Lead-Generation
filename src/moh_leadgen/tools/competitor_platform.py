@@ -35,7 +35,7 @@ PLATFORM_OWNED = {
     "mdintegrations.com", "qualiphy.me", "doctegrity.com", "doctegrity.vip", "doctegrityportal.com",
     "steadymd.com", "wheel.com", "techstars.com",
     "fusehealth.com", "fusehealth.fit", "tryfuse.co", "carevalidate.com", "telegramd.com", "legal-telegramd.com",
-    "whitelabelmd.com", "karpahealth.com", "karpa.health", "withkarpa.com", "cuvo.co",
+    "whitelabelmd.com", "karpahealth.com", "karpa.health", "withkarpa.com", "cuvo.co", "rxave.health",
 }
 
 # Source-code markers unique to each platform's storefront HTML (what source-search engines look for).
@@ -43,9 +43,10 @@ SOURCE_MARKERS: dict[str, str] = {
     "Rimo": "larp-cdn.com",
     "Fuse Health": ".fusehealth.com",
     "CareValidate": "carevalidate.com",
-    "Telegra MD": "telegramd.com",
-    "WhiteLabel MD": "whitelabelmd.com",
+    "Telegra MD": "telemdnow",
+    "WhiteLabel MD": "intake_placement iframe",
     "Karpa": "karpahealth.com",
+    "RxAve": "rxave.health",
     "Cuvo": "cuvo.co",
     "Bask Health": "analytics.bask.health",
     "Healthie": "secure.gethealthie.com",

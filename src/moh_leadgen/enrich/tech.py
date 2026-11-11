@@ -18,9 +18,10 @@ FINGERPRINTS: dict[str, tuple[bool, list[str]]] = {
     # Verified 2026-11 on live tenant sites:
     "Fuse Health": (True, [r"[a-z0-9\-]+\.fusehealth\.com", r"fusehealth\.com/programs/"]),
     "CareValidate": (True, [r"care360-next\.carevalidate\.com", r"careValidateApiUrl", r"[a-z0-9\-]+\.carevalidate\.com"]),
-    "Telegra MD": (True, [r"[a-z0-9\-]+\.telegramd\.com", r"telegramd\.js", r"window\.telegraCustomer", r"telegraApp-script", r"support@telegramd\.com"]),
-    "WhiteLabel MD": (True, [r"wlmd-intake", r"wlmdSetCookie", r"wlmd_cfg", r"app\.whitelabelmd\.com", r"@whitelabelmd\.com"]),
+    "Telegra MD": (True, [r"[a-z0-9\-]+\.telegramd\.com", r"telegramd\.js", r"window\.telegraCustomer", r"telegraApp-script", r"support@telegramd\.com", r"telemdnow"]),
+    "WhiteLabel MD": (True, [r"wlmd-intake", r"wlmdSetCookie", r"wlmd_cfg", r"(?:app|api|forms|widgets)\.whitelabelmd\.com", r"@whitelabelmd\.com", r"intake_placement", r"function tracking_start\(\)"]),
     "Karpa": (True, [r"karpahealth\.com", r"withkarpa\.com", r"karpa\.health"]),
+    "RxAve": (True, [r"rxave\.health"]),
     "Cuvo": (True, [r"app\.cuvo\.co", r"api\.cuvo\.co", r"[a-z0-9\-]+\.cuvo\.co", r"powered by cuvo"]),
     "Healthie": (True, [r"gethealthie\.com", r"healthie\.(?:io|com)", r"secure\.gethealthie"]),
     "OpenLoop": (True, [r"openloophealth\.com", r"openloop\.(?:health|com)"]),
