@@ -34,11 +34,19 @@ PLATFORM_OWNED = {
     "gethealthie.com", "openloophealth.com", "belugahealth.com", "belugacareapp.online", "yourbelugaapp.com",
     "mdintegrations.com", "qualiphy.me", "doctegrity.com", "doctegrity.vip", "doctegrityportal.com",
     "steadymd.com", "wheel.com", "techstars.com",
+    "fusehealth.com", "fusehealth.fit", "tryfuse.co", "carevalidate.com", "telegramd.com", "legal-telegramd.com",
+    "whitelabelmd.com", "karpahealth.com", "karpa.health", "withkarpa.com", "cuvo.co",
 }
 
 # Source-code markers unique to each platform's storefront HTML (what source-search engines look for).
 SOURCE_MARKERS: dict[str, str] = {
     "Rimo": "larp-cdn.com",
+    "Fuse Health": ".fusehealth.com",
+    "CareValidate": "carevalidate.com",
+    "Telegra MD": "telegramd.com",
+    "WhiteLabel MD": "whitelabelmd.com",
+    "Karpa": "karpahealth.com",
+    "Cuvo": "cuvo.co",
     "Bask Health": "analytics.bask.health",
     "Healthie": "secure.gethealthie.com",
     "OpenLoop": "openloophealth.com",
@@ -65,6 +73,12 @@ COMPETITORS: dict[str, tuple[list[str], list[str]]] = {
     "Beluga Health": (["belugahealth.com"], ['"beluga health" telehealth partner -site:belugahealth.com']),
     "MD Integrations": (["mdintegrations.com"], ['"mdintegrations" -site:mdintegrations.com']),
     "Qualiphy": (["qualiphy.me"], ['"qualiphy" "good faith exam" -site:qualiphy.me']),
+    "Fuse Health": (["fusehealth.com"], ['"fusehealth.com" -site:fusehealth.com']),
+    "CareValidate": (["carevalidate.com"], ['"care360-next.carevalidate.com"']),
+    "Telegra MD": (["telegramd.com"], ['"telegramd.com" -site:telegramd.com']),
+    "WhiteLabel MD": (["whitelabelmd.com"], ['"app.whitelabelmd.com"', '"wlmd-intake"']),
+    "Karpa": (["karpahealth.com"], ['"karpahealth.com" -site:karpahealth.com']),
+    "Cuvo": (["cuvo.co"], ['"app.cuvo.co" -site:cuvo.co', '"powered by cuvo"']),
     "Wheel": (["wheel.com"], ['"wheel" "virtual care" powered -site:wheel.com']),
 }
 

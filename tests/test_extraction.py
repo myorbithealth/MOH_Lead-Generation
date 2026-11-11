@@ -103,3 +103,10 @@ def test_rimo_and_bask_fingerprints():
     bask = '<script src="https://checkout.bask.health/embed.js"></script>'
     assert fingerprint(bask)[1] == "Bask Health"
     assert fingerprint("<p>plain page</p>")[1] is None
+
+
+def test_new_platform_fingerprints():
+    assert fingerprint('<script src="https://integration-x.telegramd.com//telegraApp-script.js">')[1] == "Telegra MD"
+    assert fingerprint('careValidateApiUrl:"https://api.care360-next.carevalidate.com/api/v1/dynamic-case"')[1] == "CareValidate"
+    assert fingerprint('<script src="/wp-content/uploads/common/wlmd-intake-func-v4.6.js">')[1] == "WhiteLabel MD"
+    assert fingerprint('<a href="https://glow-medical-peptides.fusehealth.com/programs/1">Start</a>')[1] == "Fuse Health"

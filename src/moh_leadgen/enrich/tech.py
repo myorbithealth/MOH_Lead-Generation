@@ -15,6 +15,13 @@ FINGERPRINTS: dict[str, tuple[bool, list[str]]] = {
     # and tenants live on <brand>.rimo.health; Bask serves tenants from its *.bask.health apps.
     "Rimo": (True, [r"larp-cdn\.com", r"/pp/store/[A-Za-z0-9_\-]+/", r"[a-z0-9\-]+\.rimo\.health", r"rimo\.co/", r"rimo-(?:mark|wordmark)"]),
     "Bask Health": (True, [r"(?:checkout|app|api|analytics|cdn|pg)\.bask\.health", r"data-basky", r"baskhealth\.com", r"bask-?(?:checkout|widget|embed)", r"powered by bask"]),
+    # Verified 2026-11 on live tenant sites:
+    "Fuse Health": (True, [r"[a-z0-9\-]+\.fusehealth\.com", r"fusehealth\.com/programs/"]),
+    "CareValidate": (True, [r"care360-next\.carevalidate\.com", r"careValidateApiUrl", r"[a-z0-9\-]+\.carevalidate\.com"]),
+    "Telegra MD": (True, [r"[a-z0-9\-]+\.telegramd\.com", r"telegramd\.js", r"window\.telegraCustomer", r"telegraApp-script", r"support@telegramd\.com"]),
+    "WhiteLabel MD": (True, [r"wlmd-intake", r"wlmdSetCookie", r"wlmd_cfg", r"app\.whitelabelmd\.com", r"@whitelabelmd\.com"]),
+    "Karpa": (True, [r"karpahealth\.com", r"withkarpa\.com", r"karpa\.health"]),
+    "Cuvo": (True, [r"app\.cuvo\.co", r"api\.cuvo\.co", r"[a-z0-9\-]+\.cuvo\.co", r"powered by cuvo"]),
     "Healthie": (True, [r"gethealthie\.com", r"healthie\.(?:io|com)", r"secure\.gethealthie"]),
     "OpenLoop": (True, [r"openloophealth\.com", r"openloop\.(?:health|com)"]),
     "Wheel": (True, [r"wheel\.com", r"wheelhealth"]),
