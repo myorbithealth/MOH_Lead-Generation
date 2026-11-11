@@ -36,7 +36,9 @@ def _tool(name: str, seed: Path | None, opts: list[str]):
 
 @app.callback()
 def _setup(verbose: bool = typer.Option(False, "--verbose", "-v", help="Debug logging")):
-    logging.basicConfig(level=logging.DEBUG if verbose else logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO, format="%(levelname)s %(name)s: %(message)s"
+    )
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
@@ -83,10 +85,14 @@ def enrich(
     limit: int = typer.Option(25, help="How many leads to enrich this run"),
     llm: bool = typer.Option(False, help="Use Claude to extract decision-makers (needs ANTHROPIC_API_KEY)"),
     redo: bool = typer.Option(False, help="Re-enrich leads that were already enriched"),
-    providers: bool = typer.Option(True, help="Use Apollo/Lusha/Hunter for decision-maker contacts when keys are set"),
+    providers: bool = typer.Option(
+        True, help="Use Apollo/Lusha/Hunter for decision-maker contacts when keys are set"
+    ),
     domain: str | None = typer.Option(None, help="Enrich a single domain (added if missing)"),
     workers: int = typer.Option(4, help="Sites crawled in parallel (each host is still rate-limited)"),
-    platform: str | None = typer.Option(None, help="Only candidates seeded for / fingerprinted as this platform (prefix match)"),
+    platform: str | None = typer.Option(
+        None, help="Only candidates seeded for / fingerprinted as this platform (prefix match)"
+    ),
 ):
     """Crawl each lead's site and fill in owner, contacts, LegitScript evidence, tech stack, score."""
     store = _store()
@@ -152,7 +158,11 @@ def sync(
     """Push enriched leads to the Lovable Sales Portal or a CSV."""
     store = _store()
     source = TOOLS[tool].source if tool else None
-    leads = list(store.iter(source=source, enriched=True, min_score=min_score, unsynced_only=(target == "portal" and not all_)))
+    leads = list(
+        store.iter(
+            source=source, enriched=True, min_score=min_score, unsynced_only=(target == "portal" and not all_)
+        )
+    )
     if not leads:
         rprint("nothing to sync")
         return
@@ -214,9 +224,15 @@ def top(n: int = typer.Option(20), tool: str | None = typer.Option(None)):
     t = Table("score", "domain", "company", "vertical", "LegitScript", "owner", "email", "phone", "platform")
     for lead in _store().iter(source=source, enriched=True, limit=n):
         t.add_row(
-            str(lead.score), lead.domain, (lead.company_name or "")[:28], lead.vertical or "", lead.legitscript.status,
+            str(lead.score),
+            lead.domain,
+            (lead.company_name or "")[:28],
+            lead.vertical or "",
+            lead.legitscript.status,
             f"{lead.owner_name or ''} {('(' + lead.owner_title + ')') if lead.owner_title else ''}"[:34],
-            lead.owner_email or lead.primary_email or "", lead.primary_phone or "", lead.competitor_platform or "",
+            lead.owner_email or lead.primary_email or "",
+            lead.primary_phone or "",
+            lead.competitor_platform or "",
         )
     console.print(t)
 

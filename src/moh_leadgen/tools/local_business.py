@@ -46,12 +46,42 @@ DEFAULT_CATEGORIES = [
 ]
 
 DEFAULT_CITIES = [
-    "Los Angeles, CA", "San Diego, CA", "San Francisco, CA", "Sacramento, CA", "Phoenix, AZ", "Scottsdale, AZ",
-    "Las Vegas, NV", "Denver, CO", "Dallas, TX", "Houston, TX", "Austin, TX", "San Antonio, TX", "Miami, FL",
-    "Fort Lauderdale, FL", "Tampa, FL", "Orlando, FL", "Jacksonville, FL", "Atlanta, GA", "Charlotte, NC",
-    "Raleigh, NC", "Nashville, TN", "Chicago, IL", "Minneapolis, MN", "Columbus, OH", "Detroit, MI",
-    "New York, NY", "Brooklyn, NY", "Boston, MA", "Philadelphia, PA", "Washington, DC", "Seattle, WA",
-    "Portland, OR", "Salt Lake City, UT", "Kansas City, MO", "St. Louis, MO", "Indianapolis, IN",
+    "Los Angeles, CA",
+    "San Diego, CA",
+    "San Francisco, CA",
+    "Sacramento, CA",
+    "Phoenix, AZ",
+    "Scottsdale, AZ",
+    "Las Vegas, NV",
+    "Denver, CO",
+    "Dallas, TX",
+    "Houston, TX",
+    "Austin, TX",
+    "San Antonio, TX",
+    "Miami, FL",
+    "Fort Lauderdale, FL",
+    "Tampa, FL",
+    "Orlando, FL",
+    "Jacksonville, FL",
+    "Atlanta, GA",
+    "Charlotte, NC",
+    "Raleigh, NC",
+    "Nashville, TN",
+    "Chicago, IL",
+    "Minneapolis, MN",
+    "Columbus, OH",
+    "Detroit, MI",
+    "New York, NY",
+    "Brooklyn, NY",
+    "Boston, MA",
+    "Philadelphia, PA",
+    "Washington, DC",
+    "Seattle, WA",
+    "Portland, OR",
+    "Salt Lake City, UT",
+    "Kansas City, MO",
+    "St. Louis, MO",
+    "Indianapolis, IN",
 ]
 
 
@@ -120,7 +150,9 @@ class LocalBusinessTool(Tool):
     description = "Med spas, gyms, clinics and wellness businesses by city (Google Places)"
 
     def discovery_sources(self) -> list[DiscoverySource]:
-        cats = [c.strip() for c in self.options.get("categories", "").split(",") if c.strip()] or DEFAULT_CATEGORIES
+        cats = [
+            c.strip() for c in self.options.get("categories", "").split(",") if c.strip()
+        ] or DEFAULT_CATEGORIES
         cities = [c.strip() for c in self.options.get("cities", "").split(";") if c.strip()] or DEFAULT_CITIES
         osm_cats = [c.strip() for c in self.options.get("osm_categories", "").split(",") if c.strip()] or None
         return [

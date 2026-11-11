@@ -48,7 +48,15 @@ class SerpApiProvider(SearchProvider):
             while len(hits) < max_results:
                 r = client.get(
                     "https://serpapi.com/search.json",
-                    params={"engine": "google", "q": query, "num": 20, "start": start, "api_key": self.key, "gl": "us", "hl": "en"},
+                    params={
+                        "engine": "google",
+                        "q": query,
+                        "num": 20,
+                        "start": start,
+                        "api_key": self.key,
+                        "gl": "us",
+                        "hl": "en",
+                    },
                 )
                 if r.status_code != 200:
                     log.warning("serpapi %s: %s", r.status_code, r.text[:200])
@@ -56,7 +64,9 @@ class SerpApiProvider(SearchProvider):
                 organic = r.json().get("organic_results") or []
                 if not organic:
                     break
-                hits.extend(SearchHit(o.get("link", ""), o.get("title", ""), o.get("snippet", "")) for o in organic)
+                hits.extend(
+                    SearchHit(o.get("link", ""), o.get("title", ""), o.get("snippet", "")) for o in organic
+                )
                 start += len(organic)
         return hits[:max_results]
 
@@ -82,7 +92,9 @@ class GoogleCseProvider(SearchProvider):
                 items = r.json().get("items") or []
                 if not items:
                     break
-                hits.extend(SearchHit(i.get("link", ""), i.get("title", ""), i.get("snippet", "")) for i in items)
+                hits.extend(
+                    SearchHit(i.get("link", ""), i.get("title", ""), i.get("snippet", "")) for i in items
+                )
                 start += 10
         return hits[:max_results]
 
@@ -108,7 +120,9 @@ class BingProvider(SearchProvider):
                 pages = (r.json().get("webPages") or {}).get("value") or []
                 if not pages:
                     break
-                hits.extend(SearchHit(p.get("url", ""), p.get("name", ""), p.get("snippet", "")) for p in pages)
+                hits.extend(
+                    SearchHit(p.get("url", ""), p.get("name", ""), p.get("snippet", "")) for p in pages
+                )
                 offset += len(pages)
         return hits[:max_results]
 
@@ -136,10 +150,12 @@ class AnthropicSearchProvider(SearchProvider):
                 max_tokens=2000,
                 output_config={"effort": "low"},
                 tools=[{"type": "web_search_20260209", "name": "web_search", "max_uses": 3}],
-                messages=[{
-                    "role": "user",
-                    "content": f"Run a web search for exactly this query and reply with one line: done.\n\n{query}",
-                }],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"Run a web search for exactly this query and reply with one line: done.\n\n{query}",
+                    }
+                ],
             )
         except anthropic.APIStatusError as exc:
             log.warning("claude web search failed for %r: %s", query, exc)
@@ -170,7 +186,9 @@ def build_search_provider() -> SearchProvider | None:
         try:
             return AnthropicSearchProvider(settings.anthropic_key)
         except ImportError:
-            log.warning("ANTHROPIC_API_KEY is set but the anthropic package is missing: pip install -e '.[llm]'")
+            log.warning(
+                "ANTHROPIC_API_KEY is set but the anthropic package is missing: pip install -e '.[llm]'"
+            )
     return None
 
 
@@ -213,7 +231,13 @@ class SearchDiscovery(DiscoverySource):
                     domain=domain,
                     source=self.source,
                     discovered_via=f"search:{self.provider.name}",
-                    source_detail={**self.detail, "query": q, "title": hit.title, "snippet": hit.snippet[:300], "url": hit.url},
+                    source_detail={
+                        **self.detail,
+                        "query": q,
+                        "title": hit.title,
+                        "snippet": hit.snippet[:300],
+                        "url": hit.url,
+                    },
                 )
                 count += 1
                 if limit and count >= limit:

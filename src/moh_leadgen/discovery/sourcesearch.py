@@ -56,7 +56,9 @@ class PublicWWWDiscovery(DiscoverySource):
                         continue
                     seen.add(domain)
                     yield Candidate(
-                        domain=domain, source=self.source, discovered_via="publicwww",
+                        domain=domain,
+                        source=self.source,
+                        discovered_via="publicwww",
                         source_detail={"platform": platform, "marker": marker},
                     )
                     count += 1
@@ -77,10 +79,14 @@ class NerdyDataDiscovery(DiscoverySource):
     def discover(self, limit: int | None = None) -> Iterator[Candidate]:
         seen: set[str] = set()
         count = 0
-        with httpx.Client(timeout=120, headers={"Authorization": f"Bearer {settings.nerdydata_key}"}) as client:
+        with httpx.Client(
+            timeout=120, headers={"Authorization": f"Bearer {settings.nerdydata_key}"}
+        ) as client:
             for platform, marker in self.markers.items():
                 try:
-                    r = client.get("https://api.nerdydata.com/v1/search", params={"query": marker, "limit": 1000})
+                    r = client.get(
+                        "https://api.nerdydata.com/v1/search", params={"query": marker, "limit": 1000}
+                    )
                 except httpx.HTTPError as exc:
                     log.warning("nerdydata failed for %s: %s", marker, exc)
                     continue
@@ -92,7 +98,12 @@ class NerdyDataDiscovery(DiscoverySource):
                     if not domain or domain in seen or is_junk(domain):
                         continue
                     seen.add(domain)
-                    yield Candidate(domain=domain, source=self.source, discovered_via="nerdydata", source_detail={"platform": platform, "marker": marker})
+                    yield Candidate(
+                        domain=domain,
+                        source=self.source,
+                        discovered_via="nerdydata",
+                        source_detail={"platform": platform, "marker": marker},
+                    )
                     count += 1
                     if limit and count >= limit:
                         return

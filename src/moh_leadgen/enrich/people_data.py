@@ -25,9 +25,21 @@ from .extract import DECISION_RE
 log = logging.getLogger(__name__)
 
 DECISION_TITLES = [
-    "Founder", "Co-Founder", "Owner", "CEO", "Chief Executive Officer", "President",
-    "COO", "Chief Operating Officer", "CMO", "Chief Medical Officer", "Medical Director",
-    "Managing Partner", "General Manager", "Head of Growth", "VP Operations",
+    "Founder",
+    "Co-Founder",
+    "Owner",
+    "CEO",
+    "Chief Executive Officer",
+    "President",
+    "COO",
+    "Chief Operating Officer",
+    "CMO",
+    "Chief Medical Officer",
+    "Medical Director",
+    "Managing Partner",
+    "General Manager",
+    "Head of Growth",
+    "VP Operations",
 ]
 
 APOLLO = "https://api.apollo.io/api/v1"
@@ -36,8 +48,16 @@ HUNTER = "https://api.hunter.io/v2"
 
 
 def _split(name: str) -> tuple[str, str]:
-    parts = [p for p in name.replace("Dr.", "").replace("Dr ", "").replace(",", " ").split() if p and p[0].isalpha()]
-    parts = [p for p in parts if p.upper() not in ("MD", "DO", "NP", "RN", "PHD", "PA-C", "PHARMD", "MBA", "DNP", "FNP")]
+    parts = [
+        p
+        for p in name.replace("Dr.", "").replace("Dr ", "").replace(",", " ").split()
+        if p and p[0].isalpha()
+    ]
+    parts = [
+        p
+        for p in parts
+        if p.upper() not in ("MD", "DO", "NP", "RN", "PHD", "PA-C", "PHARMD", "MBA", "DNP", "FNP")
+    ]
     if not parts:
         return "", ""
     return parts[0], parts[-1] if len(parts) > 1 else ""
@@ -47,13 +67,20 @@ def _split(name: str) -> tuple[str, str]:
 class Apollo:
     def __init__(self, key: str | None = None):
         self.key = key or settings.apollo_key
-        self.client = httpx.Client(base_url=APOLLO, timeout=40, headers={"x-api-key": self.key, "Content-Type": "application/json"})
+        self.client = httpx.Client(
+            base_url=APOLLO, timeout=40, headers={"x-api-key": self.key, "Content-Type": "application/json"}
+        )
 
     def available(self) -> bool:
         return bool(self.key)
 
     def search_people(self, domain: str, limit: int = 8) -> list[Person]:
-        body = {"q_organization_domains_list": [domain], "person_titles": DECISION_TITLES, "per_page": limit, "page": 1}
+        body = {
+            "q_organization_domains_list": [domain],
+            "person_titles": DECISION_TITLES,
+            "per_page": limit,
+            "page": 1,
+        }
         people: list[Person] = []
         for path in ("/mixed_people/api_search", "/mixed_people/search"):
             try:
@@ -73,9 +100,14 @@ class Apollo:
                 title = p.get("title")
                 people.append(
                     Person(
-                        name=name, title=title, linkedin=p.get("linkedin_url"),
-                        email=(p.get("email") or "").lower() or None if "@" in (p.get("email") or "") and "not_unlocked" not in (p.get("email") or "") else None,
-                        source_url="apollo", confidence=0.85,
+                        name=name,
+                        title=title,
+                        linkedin=p.get("linkedin_url"),
+                        email=(p.get("email") or "").lower() or None
+                        if "@" in (p.get("email") or "") and "not_unlocked" not in (p.get("email") or "")
+                        else None,
+                        source_url="apollo",
+                        confidence=0.85,
                         is_decision_maker=bool(title and DECISION_RE.search(title)),
                     )
                 )
@@ -84,7 +116,12 @@ class Apollo:
 
     def enrich_person(self, person: Person, domain: str, *, reveal_phone: bool = False) -> Person:
         first, last = _split(person.name)
-        body: dict[str, Any] = {"first_name": first, "last_name": last, "domain": domain, "reveal_personal_emails": False}
+        body: dict[str, Any] = {
+            "first_name": first,
+            "last_name": last,
+            "domain": domain,
+            "reveal_personal_emails": False,
+        }
         if person.linkedin:
             body["linkedin_url"] = person.linkedin
         if reveal_phone and settings.apollo_phone_webhook:
@@ -125,7 +162,13 @@ class Lusha:
 
     def enrich_person(self, person: Person, domain: str) -> Person:
         first, last = _split(person.name)
-        params: dict[str, Any] = {"firstName": first, "lastName": last, "companyDomain": domain, "revealEmails": "true", "revealPhones": "true"}
+        params: dict[str, Any] = {
+            "firstName": first,
+            "lastName": last,
+            "companyDomain": domain,
+            "revealEmails": "true",
+            "revealPhones": "true",
+        }
         if person.linkedin:
             params["linkedinUrl"] = person.linkedin
         try:
@@ -176,7 +219,10 @@ class Hunter:
         if not (first and last):
             return person
         try:
-            r = self.client.get("/email-finder", params={"domain": domain, "first_name": first, "last_name": last, "api_key": self.key})
+            r = self.client.get(
+                "/email-finder",
+                params={"domain": domain, "first_name": first, "last_name": last, "api_key": self.key},
+            )
         except httpx.HTTPError as exc:
             log.warning("hunter finder failed for %s: %s", person.name, exc)
             return person
@@ -203,7 +249,9 @@ class Hunter:
 
 
 # ----------------------------------------------------------------------------- orchestration
-def enrich_decision_makers(people: list[Person], domain: str, *, max_people: int = 2) -> tuple[list[Person], list[str]]:
+def enrich_decision_makers(
+    people: list[Person], domain: str, *, max_people: int = 2
+) -> tuple[list[Person], list[str]]:
     """Fill email / phone / LinkedIn for the top decision-makers using whichever providers are configured.
 
     Returns (people, providers_used)."""

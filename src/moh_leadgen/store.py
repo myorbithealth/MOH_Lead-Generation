@@ -62,7 +62,9 @@ class LeadStore:
     def save(self, lead: Lead, *, synced: bool = False) -> None:
         now = _now()
         data = lead.model_dump_json()
-        existing = self.conn.execute("select created_at, synced_at from leads where domain=?", (lead.domain,)).fetchone()
+        existing = self.conn.execute(
+            "select created_at, synced_at from leads where domain=?", (lead.domain,)
+        ).fetchone()
         created_at = existing["created_at"] if existing else now
         synced_at = now if synced else (existing["synced_at"] if existing else None)
         self.conn.execute(
@@ -137,9 +139,13 @@ class LeadStore:
             "select count(*) from leads where synced_at is null or synced_at < updated_at"
         ).fetchone()[0]
         for lo, hi in ((0, 30), (30, 60), (60, 80), (80, 101)):
-            n = self.conn.execute("select count(*) from leads where score>=? and score<?", (lo, hi)).fetchone()[0]
+            n = self.conn.execute(
+                "select count(*) from leads where score>=? and score<?", (lo, hi)
+            ).fetchone()[0]
             out["score_buckets"][f"{lo}-{hi - 1}"] = n
         return out
 
     def export_json(self) -> list[dict]:
-        return [json.loads(r["data"]) for r in self.conn.execute("select data from leads order by score desc")]
+        return [
+            json.loads(r["data"]) for r in self.conn.execute("select data from leads order by score desc")
+        ]

@@ -18,7 +18,9 @@ from .base import DiscoverySource
 
 log = logging.getLogger(__name__)
 
-_IGNORED_LABELS = re.compile(r"^(www|api|app|staging|stage|dev|test|cdn|static|mail|smtp|admin|docs|status|demo|sandbox|analytics|otel|pg|qr|feedback|franchise|\*)\.|-demo\.|\.demo\.")
+_IGNORED_LABELS = re.compile(
+    r"^(www|api|app|staging|stage|dev|test|cdn|static|mail|smtp|admin|docs|status|demo|sandbox|analytics|otel|pg|qr|feedback|franchise|\*)\.|-demo\.|\.demo\."
+)
 
 
 class CrtShDiscovery(DiscoverySource):
@@ -60,7 +62,11 @@ class CrtShDiscovery(DiscoverySource):
                     domain=name,
                     source=self.source,
                     discovered_via=f"crtsh:{self.platform_domain}",
-                    source_detail={"platform": self.platform_name, "tenant_subdomain": sub, "not_before": entry.get("not_before")},
+                    source_detail={
+                        "platform": self.platform_name,
+                        "tenant_subdomain": sub,
+                        "not_before": entry.get("not_before"),
+                    },
                 )
                 count += 1
                 if limit and count >= limit:

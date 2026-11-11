@@ -15,9 +15,28 @@ from ..models import Person
 from .site_crawler import Page, SiteSnapshot
 
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
-OBFUSCATED_EMAIL_RE = re.compile(r"([A-Za-z0-9._%+-]+)\s*(?:\[at\]|\(at\)|\{at\}| at )\s*([A-Za-z0-9.-]+)\s*(?:\[dot\]|\(dot\)|\{dot\}| dot )\s*([A-Za-z]{2,})", re.IGNORECASE)
-_EMAIL_JUNK = re.compile(r"(example\.|sentry|wixpress|\.png$|\.jpg$|\.gif$|\.svg$|\.webp$|@2x|noreply|no-reply|donotreply)", re.IGNORECASE)
-_GENERIC_LOCALPARTS = ("info", "hello", "contact", "support", "admin", "office", "team", "sales", "care", "help", "frontdesk", "appointments")
+OBFUSCATED_EMAIL_RE = re.compile(
+    r"([A-Za-z0-9._%+-]+)\s*(?:\[at\]|\(at\)|\{at\}| at )\s*([A-Za-z0-9.-]+)\s*(?:\[dot\]|\(dot\)|\{dot\}| dot )\s*([A-Za-z]{2,})",
+    re.IGNORECASE,
+)
+_EMAIL_JUNK = re.compile(
+    r"(example\.|sentry|wixpress|\.png$|\.jpg$|\.gif$|\.svg$|\.webp$|@2x|noreply|no-reply|donotreply)",
+    re.IGNORECASE,
+)
+_GENERIC_LOCALPARTS = (
+    "info",
+    "hello",
+    "contact",
+    "support",
+    "admin",
+    "office",
+    "team",
+    "sales",
+    "care",
+    "help",
+    "frontdesk",
+    "appointments",
+)
 GENERIC_LOCAL_RE = re.compile(
     r"^(info|hello|hi|contact|support|help|care|team|sales|admin|office|press|media|pr|legal|privacy|security|careers|jobs|"
     r"billing|compliance|marketing|partnerships?|partners|feedback|customer\.?service|customercare|concierge|members?|patients?|"
@@ -47,9 +66,16 @@ def infer_email_pattern(emails: list[str], people: list[Person]) -> str | None:
         for first, last in names:
             f, l = first[:1], last[:1]
             candidates = {
-                "{first}.{last}": f"{first}.{last}", "{first}{last}": f"{first}{last}", "{f}{last}": f"{f}{last}",
-                "{first}_{last}": f"{first}_{last}", "{first}": first, "{f}.{last}": f"{f}.{last}", "{last}": last,
-                "{first}{l}": f"{first}{l}", "{last}.{first}": f"{last}.{first}", "{last}{first}": f"{last}{first}",
+                "{first}.{last}": f"{first}.{last}",
+                "{first}{last}": f"{first}{last}",
+                "{f}{last}": f"{f}{last}",
+                "{first}_{last}": f"{first}_{last}",
+                "{first}": first,
+                "{f}.{last}": f"{f}.{last}",
+                "{last}": last,
+                "{first}{l}": f"{first}{l}",
+                "{last}.{first}": f"{last}.{first}",
+                "{last}{first}": f"{last}{first}",
             }
             for pattern, value in candidates.items():
                 if local == value:
@@ -64,14 +90,24 @@ def infer_email_pattern(emails: list[str], people: list[Person]) -> str | None:
 
 def apply_email_pattern(pattern: str, name: str, domain: str) -> str | None:
     parts = [p for p in name.replace("Dr.", "").replace(",", " ").split() if p[:1].isalpha()]
-    parts = [p for p in parts if p.upper() not in ("MD", "DO", "NP", "RN", "PHD", "PA-C", "PHARMD", "MBA", "DNP", "FNP")]
+    parts = [
+        p
+        for p in parts
+        if p.upper() not in ("MD", "DO", "NP", "RN", "PHD", "PA-C", "PHARMD", "MBA", "DNP", "FNP")
+    ]
     if len(parts) < 2:
         return None
     first, last = re.sub(r"[^a-z]", "", parts[0].lower()), re.sub(r"[^a-z]", "", parts[-1].lower())
     if not first or not last:
         return None
-    local = pattern.replace("{first}", first).replace("{last}", last).replace("{f}", first[0]).replace("{l}", last[0])
+    local = (
+        pattern.replace("{first}", first)
+        .replace("{last}", last)
+        .replace("{f}", first[0])
+        .replace("{l}", last[0])
+    )
     return f"{local}@{domain}"
+
 
 SOCIAL_HOSTS = {
     "linkedin.com": "linkedin",
@@ -96,9 +132,14 @@ ROLE_WORDS = (
     r"medical director|clinical director|chief medical officer|chief operating officer|chief technology officer|"
     r"chief [a-z]+ officer|director of [a-z]+|vice president|vp of [a-z]+|general manager|practice manager|lead physician"
 )
-DECISION_RE = re.compile(r"founder|owner|ceo|chief executive|president|managing|partner|medical director|cmo|coo|principal|general manager", re.IGNORECASE)
+DECISION_RE = re.compile(
+    r"founder|owner|ceo|chief executive|president|managing|partner|medical director|cmo|coo|principal|general manager",
+    re.IGNORECASE,
+)
 _W = r"[A-Z][a-z'\-]+(?:[A-Z][a-z]+)?"  # Jane, McBride, O'Neil, DeLuca - but not CEO / MD
-NAME_RE = re.compile(rf"^(?:Dr\.?\s+)?{_W}(?:\s+[A-Z]\.?)?(?:\s+{_W}){{1,2}}(?:,?\s+(?:MD|DO|NP|PA-C|RN|PharmD|PhD|FNP|DNP|APRN|MBA))*$")
+NAME_RE = re.compile(
+    rf"^(?:Dr\.?\s+)?{_W}(?:\s+[A-Z]\.?)?(?:\s+{_W}){{1,2}}(?:,?\s+(?:MD|DO|NP|PA-C|RN|PharmD|PhD|FNP|DNP|APRN|MBA))*$"
+)
 _NON_NAME = re.compile(
     r"\b(privacy|policy|terms|contact|about|home|login|sign|book|learn|read|more|our|the|and|team|services?|treatment|"
     r"health|healthcare|clinic|medical|care|center|group|wellness|rights|reserved|llc|inc|how|what|why|when|where|who|"
@@ -134,7 +175,13 @@ def extract_emails(snapshot: SiteSnapshot, domain: str) -> list[str]:
             continue
         addr_domain = addr.split("@", 1)[1]
         # Prefer same-domain addresses; keep others only if they look like real mailboxes.
-        if not (addr_domain == root or addr_domain.endswith("." + root) or "@gmail." in addr or "@outlook." in addr or "@yahoo." in addr):
+        if not (
+            addr_domain == root
+            or addr_domain.endswith("." + root)
+            or "@gmail." in addr
+            or "@outlook." in addr
+            or "@yahoo." in addr
+        ):
             continue
         out.append(addr)
     return out[:10]
@@ -188,7 +235,23 @@ def extract_jsonld(snapshot: SiteSnapshot) -> list[dict[str, Any]]:
     return objs
 
 
-_ORG_TYPES = ("Organization", "LocalBusiness", "MedicalBusiness", "MedicalClinic", "Pharmacy", "Physician", "HealthAndBeautyBusiness", "Store", "Corporation", "MedicalOrganization", "Dentist", "ExerciseGym", "HealthClub", "DaySpa", "BeautySalon")
+_ORG_TYPES = (
+    "Organization",
+    "LocalBusiness",
+    "MedicalBusiness",
+    "MedicalClinic",
+    "Pharmacy",
+    "Physician",
+    "HealthAndBeautyBusiness",
+    "Store",
+    "Corporation",
+    "MedicalOrganization",
+    "Dentist",
+    "ExerciseGym",
+    "HealthClub",
+    "DaySpa",
+    "BeautySalon",
+)
 
 
 def organization_from_jsonld(objs: list[dict[str, Any]]) -> dict[str, Any]:
@@ -206,12 +269,16 @@ def organization_from_jsonld(objs: list[dict[str, Any]]) -> dict[str, Any]:
         if isinstance(addr, list):
             addr = addr[0] if addr else None
         if isinstance(addr, dict):
-            addr = {k: v for k, v in addr.items() if not (isinstance(v, str) and not re.search(r"[A-Za-z0-9]", v))}
+            addr = {
+                k: v for k, v in addr.items() if not (isinstance(v, str) and not re.search(r"[A-Za-z0-9]", v))
+            }
             out.setdefault("street", addr.get("streetAddress"))
             out.setdefault("city", addr.get("addressLocality"))
             out.setdefault("state", addr.get("addressRegion"))
             out.setdefault("postal", addr.get("postalCode"))
-            out.setdefault("country", addr.get("addressCountry") if isinstance(addr.get("addressCountry"), str) else None)
+            out.setdefault(
+                "country", addr.get("addressCountry") if isinstance(addr.get("addressCountry"), str) else None
+            )
         elif isinstance(addr, str):
             out.setdefault("street", addr)
         same_as = obj.get("sameAs")
@@ -311,7 +378,12 @@ def extract_people_heuristic(snapshot: SiteSnapshot) -> list[Person]:
 
     def add(name: str, title: str | None, url: str, conf: float) -> None:
         name = _clean_name(name)
-        name = re.sub(r"\s+(CEO|COO|CFO|CTO|CMO|President|Founder|Co-?founder|Owner|Partner|Director|Co)$", "", name, flags=re.IGNORECASE)
+        name = re.sub(
+            r"\s+(CEO|COO|CFO|CTO|CMO|President|Founder|Co-?founder|Owner|Partner|Director|Co)$",
+            "",
+            name,
+            flags=re.IGNORECASE,
+        )
         if not _looks_like_name(name):
             return
         key = name.lower()
@@ -319,7 +391,10 @@ def extract_people_heuristic(snapshot: SiteSnapshot) -> list[Person]:
         p = found.get(key)
         if p is None:
             found[key] = Person(
-                name=name, title=title, source_url=url, confidence=conf,
+                name=name,
+                title=title,
+                source_url=url,
+                confidence=conf,
                 is_decision_maker=bool(title and DECISION_RE.search(title)),
             )
         elif title and not p.title:
@@ -328,7 +403,9 @@ def extract_people_heuristic(snapshot: SiteSnapshot) -> list[Person]:
             p.confidence = max(p.confidence, conf)
 
     for page in snapshot.pages:
-        if re.search(r"privacy|terms|legal|policy|hipaa|disclaimer|refund|accessibility", page.url, re.IGNORECASE):
+        if re.search(
+            r"privacy|terms|legal|policy|hipaa|disclaimer|refund|accessibility", page.url, re.IGNORECASE
+        ):
             continue
         # 1. Headings followed by a short title-ish line.
         for h in page.soup.find_all(["h1", "h2", "h3", "h4", "h5", "strong", "b"]):
@@ -346,12 +423,29 @@ def extract_people_heuristic(snapshot: SiteSnapshot) -> list[Person]:
                 add(name, title, page.url, 0.6)
 
         # 2. Inline "Jane Doe, Founder & CEO" / "Founder: Jane Doe" / "founded by Jane Doe".
-        for m in re.finditer(r"(?<![a-z] )((?:Dr\.?\s+)?[A-Z][a-zA-Z'\-]+(?:\s+[A-Z]\.?)?(?:\s+[A-Z][a-zA-Z'\-]+){1,2}(?:,\s*(?:MD|DO|NP|PA-C|RN|PharmD|PhD))?)\s*(?:,|-|–|—|\||:)\s*((?:" + ROLE_WORDS + r")(?:\s*(?:&|and|/|,)\s*(?:" + ROLE_WORDS + r"))?)\b", page.text, re.IGNORECASE):
+        for m in re.finditer(
+            r"(?<![a-z] )((?:Dr\.?\s+)?[A-Z][a-zA-Z'\-]+(?:\s+[A-Z]\.?)?(?:\s+[A-Z][a-zA-Z'\-]+){1,2}(?:,\s*(?:MD|DO|NP|PA-C|RN|PharmD|PhD))?)\s*(?:,|-|–|—|\||:)\s*((?:"
+            + ROLE_WORDS
+            + r")(?:\s*(?:&|and|/|,)\s*(?:"
+            + ROLE_WORDS
+            + r"))?)\b",
+            page.text,
+            re.IGNORECASE,
+        ):
             if m.group(2)[:1].isupper() or m.group(2).lower().startswith(("co-", "chief")):
                 add(m.group(1), m.group(2), page.url, 0.65)
-        for m in re.finditer(r"\b(founded|started|owned|led|established|created)\s+by\s+(?:Dr\.?\s+)?([A-Z][a-zA-Z'\-]+(?:\s+[A-Z]\.?)?(?:\s+[A-Z][a-zA-Z'\-]+){1,2})", page.text):
+        for m in re.finditer(
+            r"\b(founded|started|owned|led|established|created)\s+by\s+(?:Dr\.?\s+)?([A-Z][a-zA-Z'\-]+(?:\s+[A-Z]\.?)?(?:\s+[A-Z][a-zA-Z'\-]+){1,2})",
+            page.text,
+        ):
             add(m.group(2), "Founder", page.url, 0.7)
-        for m in re.finditer(r"\b(" + ROLE_WORDS + r")\s*[:\-–—]\s*(?:Dr\.?\s+)?([A-Z][a-zA-Z'\-]+(?:\s+[A-Z]\.?)?(?:\s+[A-Z][a-zA-Z'\-]+){1,2})", page.text, re.IGNORECASE):
+        for m in re.finditer(
+            r"\b("
+            + ROLE_WORDS
+            + r")\s*[:\-–—]\s*(?:Dr\.?\s+)?([A-Z][a-zA-Z'\-]+(?:\s+[A-Z]\.?)?(?:\s+[A-Z][a-zA-Z'\-]+){1,2})",
+            page.text,
+            re.IGNORECASE,
+        ):
             add(m.group(2), m.group(1), page.url, 0.65)
 
     # 3. Personal LinkedIn links near a name.
@@ -406,7 +500,9 @@ def extract_description(snapshot: SiteSnapshot, org: dict[str, Any]) -> str | No
 
 def extract_address_text(snapshot: SiteSnapshot) -> str | None:
     """Fallback US street-address pattern when JSON-LD has none."""
-    rx = re.compile(r"\d{1,6}\s+[A-Za-z0-9.'\- ]{3,40}\b(?:St|Street|Ave|Avenue|Blvd|Boulevard|Rd|Road|Dr|Drive|Ln|Lane|Way|Pkwy|Parkway|Suite|Ste|Hwy|Highway)\b[^\n]{0,60}?\b[A-Z]{2}\s+\d{5}(?:-\d{4})?")
+    rx = re.compile(
+        r"\d{1,6}\s+[A-Za-z0-9.'\- ]{3,40}\b(?:St|Street|Ave|Avenue|Blvd|Boulevard|Rd|Road|Dr|Drive|Ln|Lane|Way|Pkwy|Parkway|Suite|Ste|Hwy|Highway)\b[^\n]{0,60}?\b[A-Z]{2}\s+\d{5}(?:-\d{4})?"
+    )
     for page in snapshot.pages:
         m = rx.search(page.text)
         if m:

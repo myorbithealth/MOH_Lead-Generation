@@ -52,7 +52,9 @@ def booking_link(lead: Lead) -> str | None:
     return f"{base}{sep}utm_source=leadgen&utm_medium={lead.source}&utm_campaign={lead.vertical or 'general'}&utm_content={lead.domain}"
 
 
-def enrich_lead(lead: Lead, client: PoliteClient, *, use_llm: bool = False, use_providers: bool = True) -> Lead:
+def enrich_lead(
+    lead: Lead, client: PoliteClient, *, use_llm: bool = False, use_providers: bool = True
+) -> Lead:
     lead.errors = []
     snap = crawl_site(lead.domain, client)
     lead.errors.extend(snap.errors)
@@ -143,7 +145,9 @@ def enrich_lead(lead: Lead, client: PoliteClient, *, use_llm: bool = False, use_
 
     dns_facts = dns_info.lookup(lead.domain)
     lead.has_mx = dns_facts.get("has_mx")
-    lead.source_detail["dns"] = {k: dns_facts.get(k) for k in ("mx", "cname_chain", "ptr", "mail_provider") if dns_facts.get(k)}
+    lead.source_detail["dns"] = {
+        k: dns_facts.get(k) for k in ("mx", "cname_chain", "ptr", "mail_provider") if dns_facts.get(k)
+    }
 
     html = snap.all_html() if snap.pages else ""
     lead.tech_stack, lead.competitor_platform = fingerprint(html, dns_facts.get("cname_chain"))

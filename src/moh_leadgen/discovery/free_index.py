@@ -26,7 +26,9 @@ from .base import DiscoverySource
 log = logging.getLogger(__name__)
 
 CHECKER_RE = re.compile(r"checker_keywords=([A-Za-z0-9.\-]+)", re.IGNORECASE)
-LEGACY_RE = re.compile(r"legitscript\.com/(?:pharmacy|websites)/([A-Za-z0-9.\-]+\.[A-Za-z]{2,})/?(?:$|[?#])", re.IGNORECASE)
+LEGACY_RE = re.compile(
+    r"legitscript\.com/(?:pharmacy|websites)/([A-Za-z0-9.\-]+\.[A-Za-z]{2,})/?(?:$|[?#])", re.IGNORECASE
+)
 
 WAYBACK_CDX = "https://web.archive.org/cdx/search/cdx"
 CC_COLLINFO = "https://index.commoncrawl.org/collinfo.json"
@@ -61,8 +63,13 @@ class WaybackDiscovery(DiscoverySource):
                         r = client.get(
                             WAYBACK_CDX,
                             params={
-                                "url": pattern, "output": "json", "fl": "original", "collapse": "urlkey",
-                                "limit": self.page_size, "page": page, "filter": "statuscode:200",
+                                "url": pattern,
+                                "output": "json",
+                                "fl": "original",
+                                "collapse": "urlkey",
+                                "limit": self.page_size,
+                                "page": page,
+                                "filter": "statuscode:200",
                             },
                         )
                     except httpx.HTTPError as exc:
@@ -84,7 +91,12 @@ class WaybackDiscovery(DiscoverySource):
 
     def discover(self, limit: int | None = None) -> Iterator[Candidate]:
         for n, (domain, url) in enumerate(domains_from_urls(self._urls()), 1):
-            yield Candidate(domain=domain, source=self.source, discovered_via="wayback_cdx", source_detail={"verify_url": url})
+            yield Candidate(
+                domain=domain,
+                source=self.source,
+                discovered_via="wayback_cdx",
+                source_detail={"verify_url": url},
+            )
             if limit and n >= limit:
                 return
 
@@ -108,7 +120,10 @@ class CommonCrawlDiscovery(DiscoverySource):
                     continue
                 for pattern in ("legitscript.com/websites/*", "legitscript.com/pharmacy/*"):
                     try:
-                        r = client.get(api, params={"url": pattern, "output": "json", "fl": "url", "filter": "=status:200"})
+                        r = client.get(
+                            api,
+                            params={"url": pattern, "output": "json", "fl": "url", "filter": "=status:200"},
+                        )
                     except httpx.HTTPError as exc:
                         log.warning("commoncrawl %s failed: %s", coll.get("id"), exc)
                         continue
@@ -122,6 +137,11 @@ class CommonCrawlDiscovery(DiscoverySource):
 
     def discover(self, limit: int | None = None) -> Iterator[Candidate]:
         for n, (domain, url) in enumerate(domains_from_urls(self._urls()), 1):
-            yield Candidate(domain=domain, source=self.source, discovered_via="commoncrawl", source_detail={"verify_url": url})
+            yield Candidate(
+                domain=domain,
+                source=self.source,
+                discovered_via="commoncrawl",
+                source_detail={"verify_url": url},
+            )
             if limit and n >= limit:
                 return

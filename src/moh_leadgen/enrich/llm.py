@@ -36,12 +36,16 @@ class ExtractedPerson(BaseModel):
 class Extraction(BaseModel):
     company_name: str | None = None
     summary: str = Field(description="One sentence: what the business sells and to whom")
-    vertical: str | None = Field(description="e.g. weight_loss_glp1, mens_health_trt, med_spa_aesthetics, addiction_treatment, online_pharmacy, telehealth_general, fitness_gym, primary_care_clinic")
+    vertical: str | None = Field(
+        description="e.g. weight_loss_glp1, mens_health_trt, med_spa_aesthetics, addiction_treatment, online_pharmacy, telehealth_general, fitness_gym, primary_care_clinic"
+    )
     is_multi_location: bool = False
     estimated_size: str | None = Field(description="solo | small (2-10) | mid (11-50) | large (50+)")
     people: list[ExtractedPerson] = Field(default_factory=list)
     uses_telehealth_already: bool = False
-    pitch_angle: str = Field(description="One sentence on why white-label telehealth infrastructure would help this specific business")
+    pitch_angle: str = Field(
+        description="One sentence on why white-label telehealth infrastructure would help this specific business"
+    )
 
 
 def available() -> bool:

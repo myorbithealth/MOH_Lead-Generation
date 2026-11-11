@@ -42,7 +42,9 @@ def _rows(text: str) -> list[dict]:
 class SemrushBacklinksDiscovery(DiscoverySource):
     name = "semrush_backlinks"
 
-    def __init__(self, target: str = "legitscript.com", source: LeadSource = "legitscript", page_size: int = 500):
+    def __init__(
+        self, target: str = "legitscript.com", source: LeadSource = "legitscript", page_size: int = 500
+    ):
         self.target = target
         self.source = source
         self.page_size = page_size
@@ -100,7 +102,13 @@ class SemrushBacklinksDiscovery(DiscoverySource):
 class SemrushAdvertisersDiscovery(DiscoverySource):
     name = "semrush_advertisers"
 
-    def __init__(self, keywords: list[str], source: LeadSource = "legitscript", database: str = "us", per_keyword: int = 100):
+    def __init__(
+        self,
+        keywords: list[str],
+        source: LeadSource = "legitscript",
+        database: str = "us",
+        per_keyword: int = 100,
+    ):
         self.keywords = keywords
         self.source = source
         self.database = database
@@ -134,7 +142,12 @@ class SemrushAdvertisersDiscovery(DiscoverySource):
                         domain=domain,
                         source=self.source,
                         discovered_via="semrush:phrase_adwords_historical",
-                        source_detail={"keyword": kw, "ad_title": row.get("Tt"), "ad_url": row.get("Ur"), "position": row.get("Po")},
+                        source_detail={
+                            "keyword": kw,
+                            "ad_title": row.get("Tt"),
+                            "ad_url": row.get("Ur"),
+                            "position": row.get("Po"),
+                        },
                     )
                     count += 1
                     if limit and count >= limit:

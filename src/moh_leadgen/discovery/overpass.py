@@ -23,8 +23,17 @@ UA = "MyOrbitHealth-LeadResearch/0.1 (+https://myorbithealth.com)"
 
 # OSM tag filters per category we care about.
 CATEGORY_FILTERS: dict[str, list[str]] = {
-    "clinic": ['["amenity"="clinic"]', '["healthcare"="clinic"]', '["amenity"="doctors"]', '["healthcare"="doctor"]'],
-    "med_spa": ['["shop"="beauty"]["beauty"~"skin_care|laser|aesthetic|medical"]', '["healthcare"="alternative"]', '["shop"="massage"]'],
+    "clinic": [
+        '["amenity"="clinic"]',
+        '["healthcare"="clinic"]',
+        '["amenity"="doctors"]',
+        '["healthcare"="doctor"]',
+    ],
+    "med_spa": [
+        '["shop"="beauty"]["beauty"~"skin_care|laser|aesthetic|medical"]',
+        '["healthcare"="alternative"]',
+        '["shop"="massage"]',
+    ],
     "gym": ['["leisure"="fitness_centre"]', '["amenity"="gym"]'],
     "pharmacy": ['["amenity"="pharmacy"]'],
     "weight_loss": ['["healthcare:speciality"~"nutrition|weight|bariatric|endocrin"]'],
@@ -67,8 +76,24 @@ def parse_elements(elements: list[dict], city: str) -> Iterator[Candidate]:
                 "city": city,
                 "place_name": t.get("name"),
                 "place_phone": t.get("phone") or t.get("contact:phone"),
-                "osm_tags": {k: v for k, v in t.items() if k in ("amenity", "healthcare", "shop", "leisure", "healthcare:speciality", "beauty")},
-                "place_address": " ".join(filter(None, (t.get("addr:housenumber"), t.get("addr:street"), t.get("addr:city"), t.get("addr:state"), t.get("addr:postcode")))) or None,
+                "osm_tags": {
+                    k: v
+                    for k, v in t.items()
+                    if k in ("amenity", "healthcare", "shop", "leisure", "healthcare:speciality", "beauty")
+                },
+                "place_address": " ".join(
+                    filter(
+                        None,
+                        (
+                            t.get("addr:housenumber"),
+                            t.get("addr:street"),
+                            t.get("addr:city"),
+                            t.get("addr:state"),
+                            t.get("addr:postcode"),
+                        ),
+                    )
+                )
+                or None,
             },
         )
 
@@ -76,7 +101,9 @@ def parse_elements(elements: list[dict], city: str) -> Iterator[Candidate]:
 class OverpassDiscovery(DiscoverySource):
     name = "openstreetmap"
 
-    def __init__(self, cities: list[str], categories: list[str] | None = None, source: LeadSource = "local_business"):
+    def __init__(
+        self, cities: list[str], categories: list[str] | None = None, source: LeadSource = "local_business"
+    ):
         self.cities = cities
         self.categories = categories or list(CATEGORY_FILTERS)
         self.source = source

@@ -20,7 +20,9 @@ class SupabaseSink:
         self.url = (url or settings.supabase_url).rstrip("/")
         self.key = key or settings.supabase_key
         if not self.url or not self.key:
-            raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for the Supabase sink")
+            raise RuntimeError(
+                "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for the Supabase sink"
+            )
         headers = {"apikey": self.key, "Content-Type": "application/json"}
         if not self.key.startswith("sb_"):
             headers["Authorization"] = f"Bearer {self.key}"

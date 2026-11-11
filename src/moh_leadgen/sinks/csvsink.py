@@ -6,9 +6,30 @@ from pathlib import Path
 from ..models import Lead
 
 COLUMNS = [
-    "score", "domain", "company_name", "vertical", "legitscript_status", "owner_name", "owner_title", "owner_email", "owner_email_status", "owner_phone",
-    "owner_linkedin", "primary_email", "primary_phone", "phones", "emails", "city", "state", "competitor_platform",
-    "tech_stack", "website", "booking_link", "source", "discovered_via", "score_reasons",
+    "score",
+    "domain",
+    "company_name",
+    "vertical",
+    "legitscript_status",
+    "owner_name",
+    "owner_title",
+    "owner_email",
+    "owner_email_status",
+    "owner_phone",
+    "owner_linkedin",
+    "primary_email",
+    "primary_phone",
+    "phones",
+    "emails",
+    "city",
+    "state",
+    "competitor_platform",
+    "tech_stack",
+    "website",
+    "booking_link",
+    "source",
+    "discovered_via",
+    "score_reasons",
 ]
 
 

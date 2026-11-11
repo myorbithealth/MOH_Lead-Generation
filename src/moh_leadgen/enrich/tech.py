@@ -13,16 +13,75 @@ FINGERPRINTS: dict[str, tuple[bool, list[str]]] = {
     # --- telehealth / DTC-care infrastructure (MyOrbit Health competitors) ---
     # Verified 2026-11: Rimo storefronts load assets from larp-cdn.com and /pp/store/<id>/branding/ paths,
     # and tenants live on <brand>.rimo.health; Bask serves tenants from its *.bask.health apps.
-    "Rimo": (True, [r"larp-cdn\.com", r"/pp/store/[A-Za-z0-9_\-]+/", r"[a-z0-9\-]+\.rimo\.health", r"rimo\.co/", r"rimo-(?:mark|wordmark)"]),
-    "Bask Health": (True, [r"(?:checkout|app|api|analytics|cdn|pg)\.bask\.health", r"data-basky", r"baskhealth\.com", r"bask-?(?:checkout|widget|embed)", r"powered by bask"]),
+    "Rimo": (
+        True,
+        [
+            r"larp-cdn\.com",
+            r"/pp/store/[A-Za-z0-9_\-]+/",
+            r"[a-z0-9\-]+\.rimo\.health",
+            r"rimo\.co/",
+            r"rimo-(?:mark|wordmark)",
+        ],
+    ),
+    "Bask Health": (
+        True,
+        [
+            r"(?:checkout|app|api|analytics|cdn|pg)\.bask\.health",
+            r"data-basky",
+            r"baskhealth\.com",
+            r"bask-?(?:checkout|widget|embed)",
+            r"powered by bask",
+        ],
+    ),
     # Verified 2026-11 on live tenant sites:
     "Fuse Health": (True, [r"[a-z0-9\-]+\.fusehealth\.com", r"fusehealth\.com/programs/"]),
-    "CareValidate": (True, [r"care360-next\.carevalidate\.com", r"careValidateApiUrl", r"[a-z0-9\-]+\.carevalidate\.com"]),
-    "Telegra MD": (True, [r"[a-z0-9\-]+\.telegramd\.com", r"telegramd\.js", r"window\.telegraCustomer", r"telegraApp-script", r"support@telegramd\.com", r"telemdnow"]),
-    "WhiteLabel MD": (True, [r"wlmd-intake", r"wlmdSetCookie", r"wlmd_cfg", r"(?:app|api|forms|widgets)\.whitelabelmd\.com", r"@whitelabelmd\.com", r"intake_placement", r"function tracking_start\(\)"]),
+    "CareValidate": (
+        True,
+        [
+            r"care360-next",
+            r"careValidateApiUrl",
+            r"[a-z0-9\-]+\.carevalidate\.com",
+            r"careglp",
+            r"primaryMedicationSubtitle1Text",
+        ],
+    ),
+    "Telegra MD": (
+        True,
+        [
+            r"[a-z0-9\-]+\.telegramd\.com",
+            r"telegramd\.js",
+            r"window\.telegraCustomer",
+            r"telegraApp-script",
+            r"support@telegramd\.com",
+            r"telemdnow",
+        ],
+    ),
+    "WhiteLabel MD": (
+        True,
+        [
+            r"wlmd-intake",
+            r"wlmdSetCookie",
+            r"wlmd_cfg",
+            r"(?:app|api|forms|widgets)\.whitelabelmd\.com",
+            r"@whitelabelmd\.com",
+            r"intake_placement",
+            r"function tracking_start\(\)",
+        ],
+    ),
     "Karpa": (True, [r"karpahealth\.com", r"withkarpa\.com", r"karpa\.health"]),
     "RxAve": (True, [r"rxave\.health"]),
-    "Cuvo": (True, [r"app\.cuvo\.co", r"api\.cuvo\.co", r"[a-z0-9\-]+\.cuvo\.co", r"powered by cuvo"]),
+    "Cuvo": (
+        True,
+        [
+            r"app\.cuvo\.co",
+            r"api\.cuvo\.co",
+            r"[a-z0-9\-]+\.cuvo\.co",
+            r"powered by cuvo",
+            r"Medstra,? Inc",
+            r"DBA Cuvo Health",
+            r"Cuvo Health",
+        ],
+    ),
     "Healthie": (True, [r"gethealthie\.com", r"healthie\.(?:io|com)", r"secure\.gethealthie"]),
     "OpenLoop": (True, [r"openloophealth\.com", r"openloop\.(?:health|com)"]),
     "Wheel": (True, [r"wheel\.com", r"wheelhealth"]),
@@ -79,7 +138,9 @@ FINGERPRINTS: dict[str, tuple[bool, list[str]]] = {
     "Next.js": (False, [r"__NEXT_DATA__|/_next/static"]),
     "React": (False, [r"react(?:-dom)?(?:\.production)?\.min\.js|data-reactroot"]),
 }
-_COMPILED = {name: (comp, [re.compile(p, re.IGNORECASE) for p in pats]) for name, (comp, pats) in FINGERPRINTS.items()}
+_COMPILED = {
+    name: (comp, [re.compile(p, re.IGNORECASE) for p in pats]) for name, (comp, pats) in FINGERPRINTS.items()
+}
 
 COMPETITOR_PLATFORMS = [name for name, (comp, _) in FINGERPRINTS.items() if comp]
 

@@ -57,7 +57,11 @@ def score_lead(lead: Lead) -> Lead:
 
     # Reachability
     if lead.owner_name:
-        add(12, f"decision-maker identified: {lead.owner_name}" + (f" ({lead.owner_title})" if lead.owner_title else ""))
+        add(
+            12,
+            f"decision-maker identified: {lead.owner_name}"
+            + (f" ({lead.owner_title})" if lead.owner_title else ""),
+        )
     if lead.owner_email and lead.owner_email_status in ("verified", "provider", "on_site"):
         add(12, f"decision-maker email ({lead.owner_email_status})")
     elif lead.owner_email:

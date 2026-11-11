@@ -79,7 +79,9 @@ class LegitScriptTool(Tool):
             SeedFileDiscovery(seed, source=self.source),
             WaybackDiscovery(source=self.source),
             CommonCrawlDiscovery(source=self.source),
-            SearchDiscovery(SEARCH_DORKS, source=self.source, per_query=int(self.options.get("per_query", 30))),
+            SearchDiscovery(
+                SEARCH_DORKS, source=self.source, per_query=int(self.options.get("per_query", 30))
+            ),
             SemrushBacklinksDiscovery("legitscript.com", source=self.source),
             SemrushAdvertisersDiscovery(AD_KEYWORDS, source=self.source),
         ]

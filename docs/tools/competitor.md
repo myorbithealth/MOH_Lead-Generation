@@ -23,9 +23,16 @@ pitch is a better/cheaper/more complete stack.
   as `integration-<brand>.telegramd.com` or `<brand>.affiliates.commerce.telegramd.com`.
 * **Karpa**: tenants sit on custom domains and link only to karpahealth.com; most also use RxAve
   (`rxave.health`) for fulfilment, which is the better search key.
-* **CareValidate**: tenants call `api.care360-next.carevalidate.com` (`careValidateApiUrl`).
-* **Cuvo**: tenant storefronts are `<brand>.med.cuvo.co` behind a wildcard certificate; no embed
-  marker leaks to custom domains, so discovery relies on "Cuvo Health" mentions.
+* **CareValidate**: tenants call `api.care360-next.carevalidate.com` (`careValidateApiUrl`); the
+  storefront template leaks `careglp` (CareGLP, their GLP-1 product) and theme variables such as
+  `primaryMedicationSubtitle1Text`, and many tenants check out through one shared Stripe
+  publishable key (search the key itself to list them; it is not committed here).
+* **Cuvo**: tenant storefronts are `<brand>.med.cuvo.co` behind a wildcard certificate. Custom
+  domains carry the legal footer "technology platform ... provided by Medstra Inc DBA Cuvo Health"
+  and the template asset `/images/products/tirzepatide-bottle.png`; the broad template class
+  `href\:\/telehealth-consent` + "tirzepatide" finds ~380 sites that the Medstra fingerprint then
+  verifies.
+* **Rimo**: the newer embed uses the `rimo-health` token; `larp-cdn.com` catches the legacy store.
 * Lesson: when a platform's domain string finds few sites, build a cluster from the known tenants
   and run PublicWWW `build_signatures`; a shared snippet usually finds 5-10x more.
 
