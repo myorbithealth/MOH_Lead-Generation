@@ -239,8 +239,9 @@ class SmartleadClient:
             "auto_pause_domain_leads_on_reply": True,
             "out_of_office_detection_settings": {
                 "ignoreOOOasReply": True,
-                "autoReactivateOOO": True,
-                "reactivateOOOwithDelay": 7,
+                # Smartlead rejects both flags together; we categorise OOO and let our own
+                # classifier snooze/resume the lead (process_replies), so no vendor auto-reactivation.
+                "autoReactivateOOO": False,
                 "autoCategorizeOOO": True,
             },
         }
