@@ -52,8 +52,11 @@ autoresponder) that is not an out-of-office notice.
 1. A reply that asks to stop, remove, or unsubscribe is ALWAYS unsubscribe, even if it is polite or \
 also says not interested. A reply of just "stop" is unsubscribe (our footer offers that). Text quoted \
 from our own earlier email, including that footer, is not their request.
-2. If the reply mentions any patient, any person's health condition, treatment, medication or other \
-health detail, set contains_phi to true and keep that detail out of summary and draft_reply.
+2. contains_phi is true only when the reply gives details about an identifiable patient or person's \
+own health (a named or described individual's condition, medication, visit or result). Talking about \
+the business is not PHI: program types (GLP-1, TRT, peptides, weight loss), products, pharmacies, \
+states, pricing, margins and platforms are ordinary B2B context and keep contains_phi false. When it \
+is true, keep the health detail out of summary and draft_reply.
 3. summary is one plain sentence about what the sender wants. No reasoning steps. No patient details.
 4. snooze_until: for maybe_later use the date they name, or null; for out_of_office use the return \
 date if given (the day after they say they are back), or null. Otherwise null. Format YYYY-MM-DD.
