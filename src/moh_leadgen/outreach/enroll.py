@@ -400,7 +400,10 @@ def enroll(
         chosen = {step: choose_variant(steps[step], rng) for step in sorted(steps)}
         # Claude openers only for named contacts in a real run; role mailboxes get the template.
         opener, source = get_opener(
-            cand.lead, anthropic_client, use_model=cand.tier == "named" and not dry_run
+            cand.lead,
+            anthropic_client,
+            use_model=cand.tier == "named" and not dry_run,
+            angle=chosen[1].angle,
         )
         result.openers[source] += 1
         payloads = []

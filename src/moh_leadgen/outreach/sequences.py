@@ -155,29 +155,23 @@ _PROOF = {
 }
 
 _GUARANTEE = (
-    "Our offer is simple: whatever you pay today for consults and for medication, we will beat it. "
-    "If we cannot, we will integrate your current pharmacy for you at no charge."
+    "Here's the offer: whatever you pay today per consult and per order, we'll beat it. One physician "
+    "fee covers a patient's consults for every medication, there's no markup on the meds, and if we "
+    "can't beat your numbers we'll integrate your current pharmacy for you, no charge."
 )
-_OWN = "You own the payment processor and your patient data. We never mark up the medication."
+_OWN = "You keep your own payment processor and your patient data. We don't mark up the medication."
 
 _SIGN_OFF = "{{sender_name}}"
-_ASK_DEMO = "Worth 20 minutes to check the numbers? Here is my calendar: {{booking_link}}"
+_ASK_DEMO = "Worth 20 minutes to run your numbers side by side? {{booking_link}}"
 
 
 def _step1_variants(segment: str) -> tuple[VariantDef, ...]:
-    proof = _PROOF[segment]
     return (
         VariantDef(
             name="price_beat",
             angle="price_beat_guarantee",
-            subject="your {{platform}} pricing",
-            body=(
-                "Hi {{first_name}},\n\n{{opener}}\n\n"
-                f"{_GUARANTEE} MyOrbit Health is white-label telehealth infrastructure for "
-                f"{{{{vertical_phrase}}}}: a physician network that does the consults, pharmacy "
-                "fulfilment, intake and checkout, all under your brand and fully customisable.\n\n"
-                f"{_ASK_DEMO}\n\n{_SIGN_OFF}"
-            ),
+            subject="your {{platform}} costs",
+            body=(f"Hi {{{{first_name}}}},\n\n{{{{opener}}}}\n\n{_GUARANTEE}\n\n{_ASK_DEMO}\n\n{_SIGN_OFF}"),
             hypothesis="A price-beat guarantee on consults and meds is the sharpest reason to take a call.",
         ),
         VariantDef(
@@ -186,24 +180,23 @@ def _step1_variants(segment: str) -> tuple[VariantDef, ...]:
             subject="who owns your patient data",
             body=(
                 "Hi {{first_name}},\n\n{{opener}}\n\n"
-                "Most platforms sit between you and your patients: their processor, their data, a "
-                f"margin on every order. MyOrbit Health is built the other way round. {_OWN} {proof}\n\n"
-                f"{_GUARANTEE}\n\n"
-                f"Open to a 20-minute look at the numbers? {{{{booking_link}}}}\n\n{_SIGN_OFF}"
+                f"{_OWN} Our physicians charge one fee per patient that covers every medication, not a "
+                "consult fee per med. And if we can't beat what you pay today, we'll integrate your "
+                "pharmacy for you at no charge.\n\n"
+                f"Worth 20 minutes? {{{{booking_link}}}}\n\n{_SIGN_OFF}"
             ),
             hypothesis="Ownership of processor and data is the pain that makes operators switch.",
         ),
         VariantDef(
             name="better_medicine",
             angle="clinical_quality_refills",
-            subject="consults, refills and margin",
+            subject="consults, refills, margin",
             body=(
                 "Hi {{first_name}},\n\n{{opener}}\n\n"
-                "Two things most {{vertical_phrase}} tell us: patients churn when refills are a fight, "
-                "and the platform takes a cut of every consult and every order. Our physician network "
-                "does real consults, gives patients multiple refills, and charges no markup on the "
-                "medication; everything from intake to pricing is customisable.\n\n"
-                f"{_GUARANTEE}\n\n"
+                "Our physicians do real consults and patients get multiple refills, so they stay. One "
+                "physician fee covers every medication, no markup on the meds, and intake, pricing and "
+                "the program list are yours to set. If we can't beat what you pay today, we'll integrate "
+                "your pharmacy for you at no charge.\n\n"
                 f"Worth a 20-minute call? {{{{booking_link}}}}\n\n{_SIGN_OFF}"
             ),
             hypothesis="Clinical quality plus refills speaks to operators who care about retention.",
@@ -214,10 +207,9 @@ def _step1_variants(segment: str) -> tuple[VariantDef, ...]:
             subject="white-label telehealth for {{company_name}}",
             body=(
                 "Hi {{first_name}},\n\n{{opener}}\n\n"
-                "MyOrbit Health runs the telehealth back end for {{vertical_phrase}}: a physician "
-                "network for consults, pharmacy fulfilment, intake and checkout, all under your brand. "
-                f"{_GUARANTEE}\n\n"
-                f"Could I show you how it works in a 20-minute demo? {{{{booking_link}}}}\n\n{_SIGN_OFF}"
+                "MyOrbit Health runs the back end: our physicians for consults, pharmacy fulfilment, "
+                f"intake and checkout, all under your brand. {_GUARANTEE}\n\n"
+                f"Could I show you in 20 minutes? {{{{booking_link}}}}\n\n{_SIGN_OFF}"
             ),
             hypothesis="Plain description with the guarantee; the baseline every angle is measured against.",
             status="control",
@@ -238,9 +230,9 @@ def _follow_ups(segment: str) -> tuple[StepDef, ...]:
                     subject="",
                     body=(
                         "Hi {{first_name}},\n\n"
-                        f"One specific on how this would work for {{{{company_name}}}}: {proof}\n\n"
-                        "Bring your current per-consult and per-order costs to the call and we will "
-                        f"show you the comparison live: {{{{booking_link}}}}\n\n{_SIGN_OFF}"
+                        f"One concrete thing on how this would work for {{{{company_name}}}}: {proof}\n\n"
+                        "Bring what you pay per consult and per order and we'll put ours next to it on "
+                        f"the call: {{{{booking_link}}}}\n\n{_SIGN_OFF}"
                     ),
                     hypothesis="A concrete how-it-works line plus a live comparison earns replies.",
                 ),
@@ -256,9 +248,10 @@ def _follow_ups(segment: str) -> tuple[StepDef, ...]:
                     subject="",
                     body=(
                         "Hi {{first_name}},\n\n"
-                        "A different way to look at it: instead of a platform fee, a processor you do "
-                        "not control and a markup on every order, {{company_name}} would work with one "
-                        f"physician network and keep the processor, the data and the margin. {_OWN}\n\n"
+                        "Another way to look at it. Today it's a platform fee, a processor you don't "
+                        "control, a consult charge per medication and a markup on every order. With us "
+                        "it's one physician network, one fee per patient, and you keep the processor, "
+                        "the data and the margin.\n\n"
                         f"Happy to walk through it in 20 minutes: {{{{booking_link}}}}\n\n{_SIGN_OFF}"
                     ),
                     hypothesis="Vendor consolidation and ownership land with operators who skipped the first angle.",
@@ -275,10 +268,9 @@ def _follow_ups(segment: str) -> tuple[StepDef, ...]:
                     subject="",
                     body=(
                         "Hi {{first_name}},\n\n"
-                        "I will stop here so I do not clutter your inbox. The guarantee stands: if we "
-                        "cannot beat what {{company_name}} pays for consults and medication, we will "
-                        "integrate your pharmacy for you at no charge. A 20-minute call is one click "
-                        f"away: {{{{booking_link}}}}\n\n{_SIGN_OFF}"
+                        "Last note from me. The offer stands: if we can't beat what {{company_name}} "
+                        "pays for consults and medication, we'll integrate your pharmacy for you at no "
+                        f"charge. Twenty minutes is all it takes to check: {{{{booking_link}}}}\n\n{_SIGN_OFF}"
                     ),
                     hypothesis="A polite last note with the guarantee gets the 'not now, but later' replies.",
                 ),
@@ -299,11 +291,11 @@ def _generic_campaign() -> CampaignDef:
         subject="telehealth for {{company_name}}",
         body=(
             "Hi {{company_name}} team,\n\n{{opener}}\n\n"
-            "Could you point me to whoever looks after partnerships or operations? MyOrbit Health is "
-            "white-label telehealth infrastructure for {{vertical_phrase}}: a physician network for "
-            "consults, pharmacy fulfilment with no markup on medication, intake and checkout under your "
-            "brand. We beat what you pay today for consults and medication, or we integrate your "
-            "pharmacy for you.\n\n"
+            "Could you pass this to whoever runs operations or partnerships? MyOrbit Health runs the "
+            "telehealth back end for {{vertical_phrase}}: our physicians do the consults (one fee per "
+            "patient, not per medication), pharmacy fulfilment with no markup, intake and checkout, all "
+            "under your brand. If we can't beat what you pay today, we'll integrate your pharmacy for "
+            "you at no charge.\n\n"
             f"If it is easier, they can book a 20-minute demo directly: {{{{booking_link}}}}\n\n{_SIGN_OFF}"
         ),
         hypothesis="A shared inbox forwards a short, specific referral ask.",
@@ -315,8 +307,8 @@ def _generic_campaign() -> CampaignDef:
         subject="",
         body=(
             "Hi again,\n\n"
-            "Just checking this reached the right person at {{company_name}}. If white-label telehealth "
-            f"is ever on the list, a 20-minute demo is here: {{{{booking_link}}}}\n\n{_SIGN_OFF}"
+            "Checking this reached the right person at {{company_name}}. If cutting what you pay per "
+            f"consult and per order is on the list, 20 minutes here: {{{{booking_link}}}}\n\n{_SIGN_OFF}"
         ),
         hypothesis="One reminder is enough for a shared inbox.",
     )

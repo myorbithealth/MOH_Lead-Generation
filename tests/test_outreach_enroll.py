@@ -288,7 +288,12 @@ class FakeAnthropic:
     """Mimics client.beta.messages.create returning a structured-output message."""
 
     def __init__(
-        self, text='{"opener": "I noticed Acme Health runs its GLP-1 program on Healthie."}', stop="end_turn"
+        self,
+        text=(
+            '{"opener": "Acme Health runs its GLP-1 program on Healthie, so you already pay a platform '
+            'fee, a consult charge per medication and a cut of every order. We would change all three."}'
+        ),
+        stop="end_turn",
     ):
         self.calls = []
         self.text = text
@@ -325,7 +330,7 @@ def test_claude_opener_is_schema_restricted_and_cached():
     [
         ('{"opener": "x"}', "refusal"),
         ('{"opener": "x"}', "max_tokens"),
-        ('{"opener": "' + "word " * 40 + '"}', "end_turn"),
+        ('{"opener": "' + "word " * 130 + '"}', "end_turn"),
         ("not json", "end_turn"),
     ],
 )
@@ -340,9 +345,9 @@ def test_bad_claude_output_falls_back_to_the_template(text, stop):
 def test_opener_facts_reference_concrete_details():
     facts = opener_facts(make_lead(legitscript={"status": "seal_detected"}))
     assert facts["platform"] == "Healthie"
-    assert facts["legitscript"] == "displays a LegitScript seal"
+    assert facts["legitscript"] == "displays a LegitScript certification seal"
     assert facts["city"] == "Austin, TX"
-    assert facts["page"] == "glp-1-program"
+    assert facts["pages"] == "glp-1-program"
 
 
 # ------------------------------------------------------------------ fakes for sync / enroll
