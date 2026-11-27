@@ -12,6 +12,7 @@ from urllib.parse import unquote, urlsplit
 import phonenumbers
 
 from ..models import Person
+from .email_hygiene import clean_email
 from .site_crawler import Page, SiteSnapshot
 
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
@@ -161,13 +162,17 @@ def extract_emails(snapshot: SiteSnapshot, domain: str) -> list[str]:
     counts: Counter[str] = Counter()
     for page in snapshot.pages:
         for a in page.soup.select('a[href^="mailto:"]'):
-            addr = unquote(a["href"][7:]).split("?", 1)[0].strip().lower()
+            addr = clean_email(a["href"])
             if addr:
                 counts[addr] += 3
         for m in EMAIL_RE.findall(page.html):
-            counts[m.lower()] += 1
+            addr = clean_email(m)
+            if addr:
+                counts[addr] += 1
         for m in OBFUSCATED_EMAIL_RE.findall(page.text):
-            counts[f"{m[0]}@{m[1]}.{m[2]}".lower()] += 2
+            addr = clean_email(f"{m[0]}@{m[1]}.{m[2]}")
+            if addr:
+                counts[addr] += 2
     root = domain.removeprefix("www.")
     out = []
     for addr, _ in counts.most_common():
@@ -263,7 +268,8 @@ def organization_from_jsonld(objs: list[dict[str, Any]]) -> dict[str, Any]:
             continue
         out.setdefault("name", obj.get("name") or obj.get("legalName"))
         out.setdefault("telephone", obj.get("telephone"))
-        out.setdefault("email", obj.get("email"))
+        if not out.get("email"):
+            out["email"] = clean_email(obj.get("email"))
         out.setdefault("description", obj.get("description"))
         addr = obj.get("address")
         if isinstance(addr, list):
@@ -310,7 +316,7 @@ def people_from_jsonld(objs: list[dict[str, Any]], org: dict[str, Any]) -> list[
                 Person(
                     name=htmllib.unescape(str(item["name"])).strip(),
                     title=title,
-                    email=item.get("email"),
+                    email=clean_email(item.get("email")),
                     linkedin=linkedin,
                     confidence=0.8,
                     is_decision_maker=bool(title and DECISION_RE.search(title)),

@@ -26,9 +26,10 @@ from typing import Any
 
 from ..config import settings
 from ..domains import normalize_domain, registrable
+from ..enrich.email_hygiene import email_owners, normalize_lead_emails
 from ..models import Lead
 from ..store import LeadStore
-from .gate import Contact, Suppressions, sendable_contacts
+from .gate import USE_DEFAULT_MX, Contact, Suppressions, sendable_contacts
 from .models import PERMANENT_SUPPRESSION_REASONS, Variant
 from .personalize import build_custom_fields, get_opener
 from .sequences import (
@@ -171,9 +172,18 @@ def plan_enrolment(
     segment: str | None = None,
     allow_generic: bool = False,
     min_score: int | None = None,
+    mx_check: Any = USE_DEFAULT_MX,
 ) -> Plan:
-    """Run every lead through the gate. Read-only: nothing is written anywhere."""
+    """Run every lead through the gate. Read-only: nothing is written anywhere.
+
+    Stored emails are cleaned in memory first (normalize_lead_emails), and the email -> companies
+    map is built over every lead so a template address shared by several companies is rejected
+    (shared_contact_email). mx_check: gate.DEFAULT_MX_CHECK by default, None to skip DNS.
+    """
     leads = list(store.iter())
+    for lead in leads:
+        normalize_lead_emails(lead)
+    shared = email_owners(leads)
     statuses = sink.fetch_status([lead.domain for lead in leads]) if sink is not None else {}
     supp = build_suppressions(leads, sink)
     plan = Plan()
@@ -182,7 +192,13 @@ def plan_enrolment(
         if segment and seg != segment:
             continue
         contacts, reason, tier = sendable_contacts(
-            lead, statuses.get(lead.domain), supp, allow_generic=allow_generic, min_score=min_score
+            lead,
+            statuses.get(lead.domain),
+            supp,
+            allow_generic=allow_generic,
+            min_score=min_score,
+            shared=shared,
+            mx_check=mx_check,
         )
         skipped = set(lead.source_detail.get("smartlead_skipped", {}))
         contacts = [c for c in contacts if c.email not in skipped]
