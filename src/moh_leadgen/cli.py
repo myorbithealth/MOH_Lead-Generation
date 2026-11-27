@@ -235,11 +235,16 @@ def people(
 def score():
     """Re-score every lead with the current weights (no crawling)."""
     store = _store()
-    n = 0
+    n = changed = 0
     for lead in store.iter():
-        store.save(score_lead(lead))
+        before = (lead.score, tuple(lead.score_reasons) if hasattr(lead, "score_reasons") else None)
+        score_lead(lead)
+        after = (lead.score, tuple(lead.score_reasons) if hasattr(lead, "score_reasons") else None)
         n += 1
-    rprint(f"re-scored {n} lead(s)")
+        if before != after:  # only rows whose score moved need a save (and a portal re-sync)
+            store.save(lead)
+            changed += 1
+    rprint(f"re-scored {n} lead(s), {changed} changed")
     return n
 
 
@@ -341,7 +346,7 @@ def run(
         platform=None,
         retry_failed=False,
     )
-    if push and settings.supabase_url and settings.supabase_key:
+    if push and portal_configured():
         sync("portal", min_score, tool, Path("out/leads.csv"), False)
     else:
         sync("csv", min_score, tool, Path(f"out/{tool}_leads.csv"), True)
@@ -465,7 +470,7 @@ def _daily_steps(
     today: date,
 ) -> list[tuple[str, Callable[[], object]]]:
     """The ordered list of steps `leadgen daily` runs. Each is a small closure so it can fail alone."""
-    has_portal = bool(settings.supabase_url and settings.supabase_key)
+    has_portal = portal_configured()
     llm = bool(settings.anthropic_key)
 
     def _discover(name: str) -> Callable[[], object]:

@@ -662,9 +662,12 @@ def test_dry_run_writes_nothing(store, tmp_path, settings_env):
     assert sink.drafts == []
 
 
-def test_enroll_refuses_without_a_postal_address(store, tmp_path, settings_env):
+def test_enroll_refuses_without_a_postal_address(store, tmp_path, settings_env, monkeypatch):
     fake, sink, state_path = _synced(tmp_path, settings_env)
     sink.settings["outreach"]["postal_address"] = "TO BE CONFIRMED"
+    monkeypatch.setattr(
+        "moh_leadgen.config.settings.outreach_postal_address", ""
+    )  # a local .env must not leak in
     with pytest.raises(RuntimeError, match="postal address"):
         enroll_mod.enroll(store, fake.client(), sink, daily_cap=300, now=NOW, state_path=state_path)
 
