@@ -9,4 +9,4 @@ outreach_app = typer.Typer(
 )
 
 # register commands (each module decorates functions with @outreach_app.command())
-from . import cli_enroll, cli_replies  # noqa: F401
+from . import cli_enroll, cli_replies, cli_text  # noqa: F401

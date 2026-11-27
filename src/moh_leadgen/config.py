@@ -111,6 +111,11 @@ class Settings:
         default_factory=lambda: _env("LEADGEN_PERSONALIZE_MODEL", "claude-sonnet-5-5")
     )
 
+    # Warm texting channel (SendBlue iMessage/SMS): consent-gated reminders and replies, never cold.
+    sendblue_api_key_id: str = field(default_factory=lambda: _env("SENDBLUE_API_KEY_ID"))
+    sendblue_api_secret: str = field(default_factory=lambda: _env("SENDBLUE_API_SECRET_KEY"))
+    sendblue_from_number: str = field(default_factory=lambda: _env("SENDBLUE_FROM_NUMBER"))
+
     @property
     def has_search_provider(self) -> bool:
         return bool(self.serpapi_key or (self.google_cse_key and self.google_cse_cx) or self.bing_key)

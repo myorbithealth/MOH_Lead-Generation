@@ -5,10 +5,12 @@ name: Outreach replies
 # Classification needs only the portal. pull-stats matches Smartlead rows to leads through the
 # local store, so the latest leads.db is restored read-only (never saved back: the daily workflow
 # owns it). Campaign ids come from app_settings 'outreach'. Each step runs only when its secrets
-# are set.
+# are set. The hourly schedule (minute 17) runs only the SendBlue texting steps: booking reminders
+# and inbound texts (see docs/outbound-sendblue.md); the 6-hourly one runs everything.
 on:
   schedule:
     - cron: "0 */6 * * *"
+    - cron: "17 * * * *"
   workflow_dispatch:
     inputs:
       limit:
@@ -35,6 +37,10 @@ jobs:
       CALCOM_API_KEY: ${{ secrets.CALCOM_API_KEY }}
       LEADGEN_BOOKING_URL: ${{ vars.LEADGEN_BOOKING_URL }}
       LEADGEN_DB: leads.db
+      SENDBLUE_API_KEY_ID: ${{ secrets.SENDBLUE_API_KEY_ID }}
+      SENDBLUE_API_SECRET_KEY: ${{ secrets.SENDBLUE_API_SECRET_KEY }}
+      SENDBLUE_FROM_NUMBER: ${{ vars.SENDBLUE_FROM_NUMBER }}
+      HOURLY_ONLY: ${{ github.event.schedule == '17 * * * *' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -43,14 +49,21 @@ jobs:
       - name: Install
         run: pip install -e ".[llm]"
       - name: Restore lead store (read-only)
+        if: env.HOURLY_ONLY != 'true'
         uses: actions/cache/restore@v4
         with:
           path: leads.db
           key: leads-db-${{ github.run_id }}
           restore-keys: leads-db-
       - name: Classify replies
-        if: env.SUPABASE_SERVICE_ROLE_KEY != '' && env.ANTHROPIC_API_KEY != ''
+        if: env.HOURLY_ONLY != 'true' && env.SUPABASE_SERVICE_ROLE_KEY != '' && env.ANTHROPIC_API_KEY != ''
         run: leadgen outreach classify --limit "${{ github.event.inputs.limit || '500' }}"
       - name: Pull Smartlead stats
-        if: always() && env.SUPABASE_SERVICE_ROLE_KEY != '' && env.SMARTLEAD_API_KEY != ''
+        if: always() && env.HOURLY_ONLY != 'true' && env.SUPABASE_SERVICE_ROLE_KEY != '' && env.SMARTLEAD_API_KEY != ''
         run: leadgen outreach pull-stats
+      - name: Inbound texts (SendBlue)
+        if: always() && env.SUPABASE_SERVICE_ROLE_KEY != '' && env.SENDBLUE_API_KEY_ID != ''
+        run: leadgen outreach text inbound --limit 200
+      - name: Text reminders (SendBlue)
+        if: always() && env.SUPABASE_SERVICE_ROLE_KEY != '' && env.SENDBLUE_API_KEY_ID != ''
+        run: leadgen outreach text reminders --window-hours 26
