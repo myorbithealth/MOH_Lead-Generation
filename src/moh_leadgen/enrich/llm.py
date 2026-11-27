@@ -4,10 +4,14 @@ a one-line company summary and the vertical. Only used when ANTHROPIC_API_KEY is
 
 Uses structured outputs so the result always validates, and the server-side refusal fallback so a
 rare safety decline degrades to a sibling model instead of an empty answer.
+
+Results are cached in Lead.source_detail["ai"] keyed by a sha256 of the page text sent to Claude,
+so `enrich --redo` only pays again for sites whose content actually changed.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from typing import Any
@@ -21,7 +25,6 @@ from .site_crawler import SiteSnapshot
 
 log = logging.getLogger(__name__)
 
-MODEL = "claude-opus-5-5"
 MAX_CHARS = 40_000
 
 
@@ -58,12 +61,8 @@ def available() -> bool:
     return True
 
 
-def extract(snapshot: SiteSnapshot) -> tuple[list[Person], dict[str, Any]] | None:
-    if not available():
-        return None
-    import anthropic
-
-    client = anthropic.Anthropic(api_key=settings.anthropic_key)
+def build_corpus(snapshot: SiteSnapshot) -> str:
+    """The page text Claude reads, capped at MAX_CHARS (homepage first)."""
     pages = []
     budget = MAX_CHARS
     for p in snapshot.pages:
@@ -72,8 +71,55 @@ def extract(snapshot: SiteSnapshot) -> tuple[list[Person], dict[str, Any]] | Non
         budget -= len(chunk)
         if budget <= 0:
             break
-    corpus = "\n\n".join(pages)
+    return "\n\n".join(pages)
 
+
+def corpus_hash(corpus: str) -> str:
+    return hashlib.sha256(corpus.encode("utf-8")).hexdigest()
+
+
+def _to_people(extracted: list[ExtractedPerson]) -> list[Person]:
+    return [
+        Person(
+            name=p.name.strip(),
+            title=p.title,
+            email=(p.email or "").lower() or None,
+            linkedin=p.linkedin,
+            source_url="claude",
+            confidence=0.75,
+            is_decision_maker=bool(p.title and DECISION_RE.search(p.title)),
+        )
+        for p in extracted
+        if p.name.strip()
+    ]
+
+
+def _from_cache(cached: dict[str, Any] | None, digest: str) -> tuple[list[Person], dict[str, Any]] | None:
+    """Reuse an earlier answer when it was made from exactly the same page text."""
+    if not cached or cached.get("corpus_sha256") != digest:
+        return None
+    try:
+        extracted = [ExtractedPerson.model_validate(p) for p in cached.get("people", [])]
+    except ValueError:
+        return None
+    return _to_people(extracted), cached
+
+
+def extract(
+    snapshot: SiteSnapshot, cached: dict[str, Any] | None = None
+) -> tuple[list[Person], dict[str, Any]] | None:
+    """Ask Claude for decision-makers and a summary; `cached` is the lead's previous source_detail["ai"]."""
+    corpus = build_corpus(snapshot)
+    digest = corpus_hash(corpus)
+    hit = _from_cache(cached, digest)
+    if hit:
+        log.debug("claude extraction cache hit for %s", snapshot.domain)
+        return hit
+    if not available():
+        return None
+    import anthropic
+
+    client = anthropic.Anthropic(api_key=settings.anthropic_key)
     prompt = (
         "You are a B2B sales researcher for MyOrbit Health, a white-label telehealth infrastructure provider "
         "(licensed providers in 50 states, pharmacy fulfilment, patient intake). Read the crawled pages below for "
@@ -83,7 +129,7 @@ def extract(snapshot: SiteSnapshot) -> tuple[list[Person], dict[str, Any]] | Non
     )
     try:
         response = client.beta.messages.create(
-            model=MODEL,
+            model=settings.llm_model,
             max_tokens=4000,
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",
@@ -110,18 +156,8 @@ def extract(snapshot: SiteSnapshot) -> tuple[list[Person], dict[str, Any]] | Non
         log.warning("claude returned unparseable output for %s: %s", snapshot.domain, exc)
         return None
 
-    people = [
-        Person(
-            name=p.name.strip(),
-            title=p.title,
-            email=(p.email or "").lower() or None,
-            linkedin=p.linkedin,
-            source_url="claude",
-            confidence=0.75,
-            is_decision_maker=bool(p.title and DECISION_RE.search(p.title)),
-        )
-        for p in data.people
-        if p.name.strip()
-    ]
     meta = data.model_dump(exclude={"people"})
-    return people, meta
+    meta["people"] = [p.model_dump() for p in data.people]
+    meta["corpus_sha256"] = digest
+    meta["model"] = settings.llm_model
+    return _to_people(data.people), meta

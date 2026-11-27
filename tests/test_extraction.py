@@ -36,7 +36,9 @@ def test_seal_detection():
 
 def test_mention_only():
     snap = SiteSnapshot(domain="x.example", final_url="https://x.example/")
-    snap.pages.append(_parse(snap.final_url, "<html><body><p>We are LegitScript certified.</p></body></html>"))
+    snap.pages.append(
+        _parse(snap.final_url, "<html><body><p>We are LegitScript certified.</p></body></html>")
+    )
     assert detect_legitscript(snap).status == "mentioned"
     snap2 = SiteSnapshot(domain="y.example", final_url="https://y.example/")
     snap2.pages.append(_parse(snap2.final_url, "<html><body><p>hello</p></body></html>"))
@@ -79,9 +81,16 @@ def test_vertical_and_tech():
 
 def test_scoring_orders_reasonably():
     strong = Lead(
-        domain="strong.example", vertical="weight_loss_glp1", pages_crawled=["x"],
-        legitscript=LegitScriptEvidence(status="seal_detected"), owner_name="A B", owner_title="CEO",
-        owner_email="a@strong.example", primary_phone="+15125550142", competitor_platform="Bask Health", has_mx=True,
+        domain="strong.example",
+        vertical="weight_loss_glp1",
+        pages_crawled=["x"],
+        legitscript=LegitScriptEvidence(status="seal_detected"),
+        owner_name="A B",
+        owner_title="CEO",
+        owner_email="a@strong.example",
+        primary_phone="+15125550142",
+        competitor_platform="Bask Health",
+        has_mx=True,
         people=[Person(name="A B", title="CEO", is_decision_maker=True)],
     )
     weak = Lead(domain="weak.example", pages_crawled=["x"], vertical="primary_care_clinic", has_mx=False)
@@ -106,7 +115,19 @@ def test_rimo_and_bask_fingerprints():
 
 
 def test_new_platform_fingerprints():
-    assert fingerprint('<script src="https://integration-x.telegramd.com//telegraApp-script.js">')[1] == "Telegra MD"
-    assert fingerprint('careValidateApiUrl:"https://api.care360-next.carevalidate.com/api/v1/dynamic-case"')[1] == "CareValidate"
-    assert fingerprint('<script src="/wp-content/uploads/common/wlmd-intake-func-v4.6.js">')[1] == "WhiteLabel MD"
-    assert fingerprint('<a href="https://glow-medical-peptides.fusehealth.com/programs/1">Start</a>')[1] == "Fuse Health"
+    assert (
+        fingerprint('<script src="https://integration-x.telegramd.com//telegraApp-script.js">')[1]
+        == "Telegra MD"
+    )
+    assert (
+        fingerprint('careValidateApiUrl:"https://api.care360-next.carevalidate.com/api/v1/dynamic-case"')[1]
+        == "CareValidate"
+    )
+    assert (
+        fingerprint('<script src="/wp-content/uploads/common/wlmd-intake-func-v4.6.js">')[1]
+        == "WhiteLabel MD"
+    )
+    assert (
+        fingerprint('<a href="https://glow-medical-peptides.fusehealth.com/programs/1">Start</a>')[1]
+        == "Fuse Health"
+    )

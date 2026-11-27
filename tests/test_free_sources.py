@@ -8,9 +8,9 @@ def test_verify_urls_to_domains():
         "https://www.legitscript.com/websites/?checker_keywords=henrymeds.com",
         "http://legitscript.com/websites/?checker_keywords=www.tryshed.com&foo=1",
         "https://www.legitscript.com/pharmacy/example-pharmacy.com/",
-        "https://www.legitscript.com/websites/",               # no domain
+        "https://www.legitscript.com/websites/",  # no domain
         "https://www.legitscript.com/websites/?checker_keywords=legitscript.com",  # junk
-        "https://www.legitscript.com/websites/?checker_keywords=HENRYMEDS.COM",     # dup
+        "https://www.legitscript.com/websites/?checker_keywords=HENRYMEDS.COM",  # dup
     ]
     out = list(domains_from_urls(urls))
     assert [d for d, _ in out] == ["henrymeds.com", "tryshed.com", "example-pharmacy.com"]
@@ -20,7 +20,14 @@ def test_overpass_query_and_parse():
     q = build_query((30.1, -97.9, 30.5, -97.5), ["clinic", "gym"])
     assert '["amenity"="clinic"]["website"]' in q and '["leisure"="fitness_centre"]["website"]' in q
     elements = [
-        {"tags": {"name": "Austin Med Spa", "website": "https://www.austinmedspa-test.com/", "phone": "+1 512 555 0100", "shop": "beauty"}},
+        {
+            "tags": {
+                "name": "Austin Med Spa",
+                "website": "https://www.austinmedspa-test.com/",
+                "phone": "+1 512 555 0100",
+                "shop": "beauty",
+            }
+        },
         {"tags": {"name": "No site"}},
         {"tags": {"name": "Dup", "website": "http://austinmedspa-test.com/about"}},
     ]

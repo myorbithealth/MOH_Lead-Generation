@@ -22,7 +22,10 @@ from ..discovery import (
     SeedFileDiscovery,
 )
 from ..discovery.base import DiscoverySource
+from ..enrich.tech import PLATFORM_ALIASES, canonical_platform
 from .base import Tool
+
+__all__ = ["COMPETITORS", "PLATFORM_ALIASES", "PLATFORM_OWNED", "SOURCE_MARKERS", "CompetitorPlatformTool"]
 
 DEFAULT_SEED = Path("seeds/competitor_platform_seed_domains.txt")
 
@@ -73,22 +76,39 @@ PLATFORM_OWNED = {
 }
 
 # Source-code markers unique to each platform's storefront HTML (what source-search engines look for).
-SOURCE_MARKERS: dict[str, str] = {
-    "Rimo": "larp-cdn.com",
-    "Fuse Health": ".fusehealth.com",
-    "CareValidate": "carevalidate.com",
-    "Telegra MD": "telemdnow",
-    "WhiteLabel MD": "intake_placement iframe",
-    "Karpa": "karpahealth.com",
-    "RxAve": "rxave.health",
-    "Cuvo": "Medstra Inc DBA Cuvo Health",
-    "Bask Health": "analytics.bask.health",
-    "Healthie": "secure.gethealthie.com",
-    "OpenLoop": "openloophealth.com",
-    "Beluga Health": "belugahealth.com",
-    "MD Integrations": "mdintegrations.com",
-    "Qualiphy": "qualiphy.me",
+# Several per platform: one string rarely finds every tenant (see docs/tools/competitor.md for how
+# each was verified). Keys are canonical names from enrich.tech.PLATFORM_ALIASES.
+SOURCE_MARKERS: dict[str, list[str]] = {
+    "Rimo": ["larp-cdn.com", "rimo-health"],
+    "Fuse Health": [".fusehealth.com"],
+    "CareValidate": [
+        "carevalidate.com",
+        "care360-next",
+        "careValidateApiUrl",
+        "careglp",
+        "primaryMedicationSubtitle1Text",
+    ],
+    "Telegra MD": ["telemdnow", "telegraApp-script.js"],
+    "WhiteLabel MD": ["intake_placement iframe", "api.whitelabelmd.com"],
+    # Most Karpa tenants fulfil through RxAve, which is the better search key.
+    "Karpa": ["karpahealth.com", "rxave.health"],
+    "Cuvo": ["Medstra Inc DBA Cuvo Health", "/images/products/tirzepatide-bottle.png"],
+    "Bask Health": ["analytics.bask.health", "data-basky"],
+    "Healthie": ["secure.gethealthie.com"],
+    "OpenLoop": ["openloophealth.com"],
+    "Beluga Health": ["belugahealth.com"],
+    "MD Integrations": ["mdintegrations.com"],
+    "Qualiphy": ["qualiphy.me"],
 }
+
+
+def _matches_platform(name: str, only: str | None) -> bool:
+    """`--opt platform=...` filter: substring match on the canonical name, aliases resolved."""
+    if not only:
+        return True
+    wanted = (canonical_platform(only) or only).lower()
+    return wanted in name.lower()
+
 
 # name -> (apex domains the platform serves tenants from, extra search dorks)
 COMPETITORS: dict[str, tuple[list[str], list[str]]] = {
@@ -146,14 +166,14 @@ class CompetitorPlatformTool(Tool):
 
     def discovery_sources(self) -> list[DiscoverySource]:
         only = self.options.get("platform")
-        markers = {k: v for k, v in SOURCE_MARKERS.items() if not only or only.lower() in k.lower()}
+        markers = {k: v for k, v in SOURCE_MARKERS.items() if _matches_platform(k, only)}
         sources: list[DiscoverySource] = [
             SeedFileDiscovery(self.seed_file or DEFAULT_SEED, source=self.source),
             PublicWWWDiscovery(markers, source=self.source),
             NerdyDataDiscovery(markers, source=self.source),
         ]
         for name, (domains, dorks) in COMPETITORS.items():
-            if only and only.lower() not in name.lower():
+            if not _matches_platform(name, only):
                 continue
             for d in domains:
                 sources.append(CrtShDiscovery(d, name, source=self.source))

@@ -20,6 +20,11 @@ on:
 permissions:
   contents: read
 
+# One run at a time: two overlapping runs would race on leads.db and could double-sync.
+concurrency:
+  group: leadgen
+  cancel-in-progress: false
+
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -60,11 +65,25 @@ jobs:
           for t in legitscript competitor local; do
             if [ "$TOOL" = "all" ] || [ "$TOOL" = "$t" ]; then
               leadgen discover "$t" --limit "$DL" || true
-              leadgen enrich "$t" --limit "$EL" $LLM || true
+              leadgen enrich "$t" --limit "$EL" --workers 16 $LLM || true
             fi
           done
+      - name: Retry failed crawls
+        shell: bash
+        run: |
+          LLM=""; [ -n "$ANTHROPIC_API_KEY" ] && LLM="--llm"
+          leadgen enrich --retry-failed --limit 100 --workers 16 $LLM || true
+      - name: Report
+        shell: bash
+        run: |
           leadgen stats
           leadgen top --n 30
+          {
+            echo "## Lead store"
+            echo '```json'
+            leadgen stats
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
           mkdir -p out
           leadgen sync csv --all --out out/leads.csv
       - name: Sync to Sales Portal
@@ -74,3 +93,16 @@ jobs:
         with:
           name: leads-${{ github.run_number }}
           path: out/leads.csv
+      # WAL mode keeps recent writes in leads.db-wal; fold them into leads.db before it is
+      # cached or uploaded so the single file is complete.
+      - name: Checkpoint lead store
+        if: always()
+        run: python -c "import sqlite3; c = sqlite3.connect('leads.db'); c.execute('pragma wal_checkpoint(TRUNCATE)'); c.close()"
+      # The cache can be evicted; an artifact per run is the durable copy of the evidence store.
+      - name: Upload lead store
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: leads-db-${{ github.run_number }}
+          path: leads.db
+          if-no-files-found: warn

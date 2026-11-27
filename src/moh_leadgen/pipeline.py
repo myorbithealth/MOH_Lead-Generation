@@ -8,19 +8,93 @@ crawl -> extract contacts/people -> LegitScript evidence -> platform fingerprint
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from .config import settings
-from .domains import normalize_domain
+from .domains import is_junk, normalize_domain
 from .enrich import dns_info, extract, llm, people_data, rdap
 from .enrich.legitscript import detect_legitscript, infer_vertical
-from .enrich.site_crawler import crawl_site
-from .enrich.tech import fingerprint
+from .enrich.site_crawler import SiteSnapshot, crawl_site
+from .enrich.tech import canonical_platform, fingerprint
 from .http import PoliteClient
 from .models import Lead, Person
 from .scoring import score_lead
+from .tools.competitor_platform import PLATFORM_OWNED
 
 log = logging.getLogger(__name__)
+
+# Failed crawls wait 1, 3, then 7 days; the 4th consecutive failure parks the row for good
+# (next_retry_at stays null). Sites that were briefly down or blocking us get another chance.
+RETRY_BACKOFF_DAYS = (1, 3, 7)
+
+
+def schedule_retry(lead: Lead, kind: str, now: datetime | None = None) -> Lead:
+    """Record a failed enrichment attempt and decide when (or whether) to try again."""
+    now = now or datetime.now(UTC)
+    lead.attempts += 1
+    lead.last_attempt_at = now
+    lead.last_error_kind = kind
+    if lead.attempts <= len(RETRY_BACKOFF_DAYS):
+        lead.next_retry_at = now + timedelta(days=RETRY_BACKOFF_DAYS[lead.attempts - 1])
+    else:
+        lead.next_retry_at = None  # parked
+    return lead
+
+
+def _record_success(lead: Lead, now: datetime) -> None:
+    """A crawl that fetched pages clears the retry state; attempts counts consecutive failures."""
+    lead.last_enriched_at = now
+    lead.last_attempt_at = now
+    lead.attempts = 0
+    lead.next_retry_at = None
+    lead.last_error_kind = None
+
+
+def rekey_target(lead: Lead, final_domain: str | None) -> str | None:
+    """The brand domain a platform-hosted tenant really belongs to, if its site redirects there.
+
+    crt.sh hands us tenants as platform subdomains (brand.rimo.health,
+    integration-brand.telegramd.com). When that subdomain redirects to the brand's own registrable
+    domain, the brand domain is the lead; the platform apex or another platform-owned domain is not.
+    """
+    apex = normalize_domain(lead.domain)
+    if not apex or apex == lead.domain:
+        return None  # already a registrable domain, not a platform subdomain
+    hosted_on_platform = apex in PLATFORM_OWNED or (lead.discovered_via or "").startswith("crtsh:")
+    if not hosted_on_platform or not final_domain:
+        return None
+    if final_domain == apex or final_domain in PLATFORM_OWNED or is_junk(final_domain):
+        return None
+    return final_domain
+
+
+def _fallback_to_discovery_metadata(lead: Lead) -> None:
+    """Use what Google Places / OSM told us at discovery time when the crawl found nothing."""
+    detail = lead.source_detail
+    phone = detail.get("place_phone")
+    if not lead.primary_phone and phone:
+        lead.primary_phone = phone
+        if phone not in lead.phones:
+            lead.phones.append(phone)
+    if not lead.company_name and detail.get("place_name"):
+        lead.company_name = detail["place_name"]
+    if not lead.address and detail.get("place_address"):
+        lead.address = detail["place_address"]
+
+
+def _record_redirect(lead: Lead, snap: SiteSnapshot) -> None:
+    """Note where the site really lives, and whether the lead should move to that domain."""
+    lead.source_detail.pop("redirected_to", None)
+    lead.source_detail.pop("rekey_to", None)
+    if not snap.pages:
+        return
+    final_domain = normalize_domain(snap.final_url)
+    # Compare registrable domains: brand.rimo.health serving from rimo.health is not a redirect.
+    if final_domain and final_domain != normalize_domain(lead.domain):
+        lead.source_detail["redirected_to"] = final_domain
+    target = rekey_target(lead, final_domain)
+    if target:
+        lead.source_detail["rekey_to"] = target
 
 
 def _merge_people(*groups: list[Person]) -> list[Person]:
@@ -60,9 +134,7 @@ def enrich_lead(
     lead.errors.extend(snap.errors)
     lead.website = snap.final_url
     lead.pages_crawled = [p.url for p in snap.pages]
-    final_domain = normalize_domain(snap.final_url)
-    if final_domain and final_domain != lead.domain:
-        lead.source_detail["redirected_to"] = final_domain
+    _record_redirect(lead, snap)
 
     if snap.pages:
         objs = extract.extract_jsonld(snap)
@@ -102,7 +174,7 @@ def enrich_lead(
         groups = [ld_people, heur_people]
 
         if use_llm and llm.available():
-            result = llm.extract(snap)
+            result = llm.extract(snap, cached=lead.source_detail.get("ai"))
             if result:
                 ai_people, meta = result
                 groups.append(ai_people)
@@ -143,6 +215,8 @@ def enrich_lead(
         if lead.owner_email_status == "guessed":
             lead.source_detail["owner_email_guessed"] = True
 
+    _fallback_to_discovery_metadata(lead)
+
     dns_facts = dns_info.lookup(lead.domain)
     lead.has_mx = dns_facts.get("has_mx")
     lead.source_detail["dns"] = {
@@ -150,9 +224,10 @@ def enrich_lead(
     }
 
     html = snap.all_html() if snap.pages else ""
-    lead.tech_stack, lead.competitor_platform = fingerprint(html, dns_facts.get("cname_chain"))
-    if lead.source == "competitor_platform" and not lead.competitor_platform:
-        lead.competitor_platform = lead.source_detail.get("platform")
+    lead.tech_stack, platform = fingerprint(html, dns_facts.get("cname_chain"))
+    if lead.source == "competitor_platform" and not platform:
+        platform = lead.source_detail.get("platform")
+    lead.competitor_platform = canonical_platform(platform)
 
     reg = rdap.lookup(lead.domain)
     lead.domain_created = reg.get("created")
@@ -163,7 +238,12 @@ def enrich_lead(
         if r_email and r_email.lower() not in lead.emails:
             lead.emails.append(r_email.lower())
 
-    lead.last_enriched_at = datetime.now(UTC)
+    now = datetime.now(UTC)
+    if snap.pages:
+        _record_success(lead, now)
+    else:
+        # Leave last_enriched_at alone so the row stays in the retry queue instead of being parked.
+        schedule_retry(lead, snap.error_kind or "other", now)
     score_lead(lead)
     lead.booking_link = booking_link(lead)
     return lead

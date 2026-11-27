@@ -18,6 +18,40 @@ log = logging.getLogger(__name__)
 
 MAX_BODY_BYTES = 3_000_000
 
+# Text in a bot-challenge interstitial (Cloudflare, Sucuri, ...). Such a page is not the site.
+_CHALLENGE_MARKERS = ("just a moment...", "cf-chl-", "challenge-platform", "attention required!")
+_DNS_HINTS = (
+    "name or service not known",
+    "temporary failure in name resolution",
+    "nodename nor servname",
+    "getaddrinfo failed",
+    "no address associated",
+    "name resolution",
+)
+
+
+def classify_exception(exc: Exception) -> str:
+    """Why a request raised: dns | timeout | other. Drives how soon enrichment retries the site."""
+    if isinstance(exc, httpx.TimeoutException):
+        return "timeout"
+    if isinstance(exc, httpx.ConnectError) and any(h in str(exc).lower() for h in _DNS_HINTS):
+        return "dns"
+    return "other"
+
+
+def classify_response(resp: httpx.Response) -> str | None:
+    """Why a response is unusable: blocked | http_4xx | http_5xx, or None when it looks fine."""
+    if resp.headers.get("cf-mitigated", "").lower() == "challenge":
+        return "blocked"
+    if resp.status_code in (403, 429):
+        return "blocked"
+    if resp.status_code >= 400:
+        head = resp.text[:4000].lower()
+        if any(m in head for m in _CHALLENGE_MARKERS):
+            return "blocked"
+        return "http_5xx" if resp.status_code >= 500 else "http_4xx"
+    return None
+
 
 class PoliteClient:
     def __init__(
@@ -32,6 +66,8 @@ class PoliteClient:
         self.min_delay = settings.min_delay_seconds if min_delay is None else min_delay
         self.respect_robots = settings.respect_robots if respect_robots is None else respect_robots
         self._last_hit: dict[str, float] = {}
+        # Why the most recent get() returned None (robots | dns | timeout | other), else None.
+        self.last_error_kind: str | None = None
         self._robots: dict[str, urllib.robotparser.RobotFileParser | None] = {}
         self._client = httpx.Client(
             headers={
@@ -81,9 +117,14 @@ class PoliteClient:
         self._last_hit[host] = time.monotonic()
 
     def get(self, url: str, *, retries: int = 2, **kwargs) -> httpx.Response | None:
-        """GET a URL. Returns None when disallowed, unreachable, or persistently failing."""
+        """GET a URL. Returns None when disallowed, unreachable, or persistently failing.
+
+        When it returns None, `last_error_kind` says why, so callers can back off sensibly.
+        """
+        self.last_error_kind = None
         if not self.allowed(url):
             log.info("robots.txt disallows %s", url)
+            self.last_error_kind = "robots"
             return None
         backoff = 2.0
         for attempt in range(retries + 1):
@@ -93,6 +134,7 @@ class PoliteClient:
             except httpx.HTTPError as exc:
                 log.debug("GET %s failed: %s", url, exc)
                 if attempt == retries:
+                    self.last_error_kind = classify_exception(exc)
                     return None
                 time.sleep(backoff)
                 backoff *= 2
@@ -104,6 +146,7 @@ class PoliteClient:
                 continue
             if len(resp.content) > MAX_BODY_BYTES:
                 log.debug("GET %s body too large (%d bytes)", url, len(resp.content))
+                self.last_error_kind = "other"
                 return None
             return resp
         return None

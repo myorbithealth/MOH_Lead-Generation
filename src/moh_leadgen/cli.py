@@ -15,7 +15,7 @@ from .config import settings
 from .http import PoliteClient
 from .models import Lead
 from .outreach.cli import outreach_app
-from .pipeline import enrich_lead
+from .pipeline import enrich_lead, schedule_retry
 from .scoring import score_lead
 from .store import LeadStore
 from .tools import TOOLS
@@ -69,7 +69,8 @@ def discover(
             rprint(f"[yellow]skip[/] {src.name}: not configured (missing key or file)")
             continue
         n = 0
-        for cand in src.discover(limit=limit or None):
+        # The source gets only a safety scan cap; --limit counts NEW domains, enforced below.
+        for cand in src.discover(limit=src.effective_scan_limit()):
             if t.keep_candidate(cand.domain) and store.add_candidate(cand):
                 n += 1
                 added += 1
@@ -95,6 +96,9 @@ def enrich(
     platform: str | None = typer.Option(
         None, help="Only candidates seeded for / fingerprinted as this platform (prefix match)"
     ),
+    retry_failed: bool = typer.Option(
+        False, "--retry-failed", help="Only re-crawl failed sites whose back-off (1d, 3d, 7d) has expired"
+    ),
 ):
     """Crawl each lead's site and fill in owner, contacts, LegitScript evidence, tech stack, score."""
     store = _store()
@@ -102,6 +106,11 @@ def enrich(
     if domain:
         lead = store.get(domain) or Lead(domain=domain, source=source or "manual", discovered_via="cli")
         leads = [lead]
+    elif retry_failed:
+        requeued = store.requeue_legacy_failures()
+        if requeued:
+            rprint(f"requeued {requeued} site(s) an older version had parked after an empty crawl")
+        leads = list(store.iter(source=source, retry_due_only=True, limit=limit, platform=platform))
     else:
         leads = list(
             store.iter(source=source, enriched=None if redo else False, limit=limit, platform=platform)
@@ -118,6 +127,7 @@ def enrich(
         except Exception as exc:  # keep the batch going
             logging.getLogger(__name__).exception("enrich failed for %s", lead.domain)
             lead.errors.append(f"enrich: {exc}")
+            schedule_retry(lead, "other")
             score_lead(lead)
         finally:
             client.close()
@@ -127,8 +137,7 @@ def enrich(
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
         futures = [pool.submit(_work, lead) for lead in leads]
         for fut in as_completed(futures):
-            lead = fut.result()
-            store.save(lead)
+            lead = save_enriched(store, fut.result())
             done += 1
             rprint(
                 f"[{done}/{len(leads)}] {lead.domain}: score {lead.score:>3}  ls={lead.legitscript.status:<13} "
@@ -136,6 +145,20 @@ def enrich(
                 f"owner={lead.owner_name or '-'} email={lead.owner_email or lead.primary_email or '-'}"
                 f"{' (' + lead.owner_email_status + ')' if lead.owner_email_status else ''} phone={lead.owner_phone or lead.primary_phone or '-'}"
             )
+
+
+def save_enriched(store: LeadStore, lead: Lead) -> Lead:
+    """Persist an enriched lead; a platform tenant that redirected to its brand moves to that domain."""
+    store.save(lead)
+    target = lead.source_detail.get("rekey_to")
+    if not target or target == lead.domain:
+        return lead
+    renamed = store.rename(lead.domain, target)
+    if renamed is None:
+        return lead
+    store.save(score_lead(renamed))
+    rprint(f"re-keyed {lead.domain} -> {target}")
+    return renamed
 
 
 @app.command()
@@ -195,8 +218,19 @@ def run(
     opt: list[str] = typer.Option([], "--opt"),
 ):
     """discover -> enrich -> score -> sync, in one go."""
-    discover(tool, discover_limit, seed, opt)
-    enrich(tool, enrich_limit, llm, False, True, None, 4)
+    discover(tool, limit=discover_limit, seed=seed, opt=opt)
+    # Keywords for every option: a typer default left out here would arrive as an OptionInfo object.
+    enrich(
+        tool,
+        limit=enrich_limit,
+        llm=llm,
+        redo=False,
+        providers=True,
+        domain=None,
+        workers=4,
+        platform=None,
+        retry_failed=False,
+    )
     if push and settings.supabase_url and settings.supabase_key:
         sync("portal", min_score, tool, Path("out/leads.csv"), False)
     else:

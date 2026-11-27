@@ -144,6 +144,34 @@ _COMPILED = {
 
 COMPETITOR_PLATFORMS = [name for name, (comp, _) in FINGERPRINTS.items() if comp]
 
+# One name per platform. Seed files, fingerprints and older store rows used several spellings for
+# the same company, which split the portal's platform counts (e.g. "Beluga" 33 vs "Beluga Health").
+PLATFORM_ALIASES: dict[str, str] = {
+    "Karpa (RxAve fulfilment)": "Karpa",
+    "RxAve": "Karpa",
+    "Beluga": "Beluga Health",
+    "GetLabs/Steady": "SteadyMD",
+    "MD": "MD Integrations",
+    "Telegra": "Telegra MD",
+    "WhiteLabel": "WhiteLabel MD",
+}
+_ALIASES_LOWER = {alias.lower(): canonical for alias, canonical in PLATFORM_ALIASES.items()}
+
+
+def canonical_platform(name: str | None) -> str | None:
+    """Map any known spelling of a platform to its one canonical name (case-insensitive)."""
+    if not name:
+        return name
+    cleaned = name.strip()
+    return _ALIASES_LOWER.get(cleaned.lower(), cleaned)
+
+
+def platform_spellings(name: str) -> list[str]:
+    """Every stored spelling that means the same platform as `name` (canonical first)."""
+    canonical = canonical_platform(name) or name
+    aliases = [alias for alias, target in PLATFORM_ALIASES.items() if target == canonical]
+    return [canonical, *aliases]
+
 
 def fingerprint(html: str, cname_chain: list[str] | None = None) -> tuple[list[str], str | None]:
     haystack = html + "\n" + "\n".join(cname_chain or [])

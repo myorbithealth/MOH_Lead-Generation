@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from .domains import is_enterprise
+from .domains import is_enterprise, normalize_domain
 from .models import Lead
 
 VERTICAL_WEIGHTS = {
@@ -25,6 +25,23 @@ VERTICAL_WEIGHTS = {
     "cbd_supplements": 6,
     "dental": 2,
 }
+
+
+def _redirects_to_other_brand(lead: Lead) -> bool:
+    """True when the site forwards to someone else's brand (a reseller, an acquirer, a parked page).
+
+    Not penalised: a platform tenant (brand.rimo.health) that forwards to its own brand domain - we
+    re-key the lead to that domain instead - and a subdomain served from its own registrable domain.
+    """
+    detail = lead.source_detail
+    redirected = detail.get("redirected_to")
+    if not redirected:
+        return False
+    if detail.get("rekey_to") == redirected or detail.get("rekeyed_from"):
+        return False
+    if redirected == normalize_domain(lead.domain):
+        return False
+    return redirected.rsplit(".", 1)[0] != lead.domain.rsplit(".", 1)[0]
 
 
 def score_lead(lead: Lead) -> Lead:
@@ -100,9 +117,8 @@ def score_lead(lead: Lead) -> Lead:
 
     if not lead.pages_crawled:
         add(-25, "site unreachable")
-    redirected = lead.source_detail.get("redirected_to")
-    if redirected and redirected.rsplit(".", 1)[0] != lead.domain.rsplit(".", 1)[0]:
-        add(-15, f"domain redirects to a different brand ({redirected})")
+    if _redirects_to_other_brand(lead):
+        add(-15, f"domain redirects to a different brand ({lead.source_detail['redirected_to']})")
 
     lead.score = max(0, min(100, score))
     lead.score_reasons = reasons

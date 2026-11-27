@@ -146,7 +146,7 @@ class AnthropicSearchProvider(SearchProvider):
 
         try:
             r = self.client.messages.create(
-                model="claude-opus-5-5",
+                model=settings.search_model,
                 max_tokens=2000,
                 output_config={"effort": "low"},
                 tools=[{"type": "web_search_20260209", "name": "web_search", "max_uses": 3}],

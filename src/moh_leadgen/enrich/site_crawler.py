@@ -10,7 +10,7 @@ from urllib.parse import urljoin, urlsplit
 from bs4 import BeautifulSoup
 
 from ..config import settings
-from ..http import PoliteClient
+from ..http import PoliteClient, classify_response
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +27,16 @@ INTERESTING_PATHS = [
 ]
 _PATH_RE = [re.compile(p, re.IGNORECASE) for p in INTERESTING_PATHS]
 
+# When the https, www and http attempts fail differently, keep the most telling reason: an HTTP
+# answer (the host exists and refused us) says more than a timeout or a DNS miss.
+_KIND_PRIORITY = ["blocked", "robots", "http_5xx", "http_4xx", "timeout", "dns", "other"]
+
+
+def _worst_kind(current: str | None, new: str) -> str:
+    if current is None:
+        return new
+    return min(current, new, key=_KIND_PRIORITY.index)
+
 
 @dataclass
 class Page:
@@ -42,6 +52,8 @@ class SiteSnapshot:
     final_url: str
     pages: list[Page] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    # Set when the homepage could not be fetched: dns | timeout | blocked | robots | http_4xx | http_5xx | other
+    error_kind: str | None = None
 
     @property
     def homepage(self) -> Page | None:
@@ -100,13 +112,20 @@ def crawl_site(domain: str, client: PoliteClient, *, max_pages: int | None = Non
     snap = SiteSnapshot(domain=domain, final_url=f"https://{domain}/")
 
     resp = None
+    kind: str | None = None
     for candidate in (f"https://{domain}/", f"https://www.{domain}/", f"http://{domain}/"):
         resp = client.get(candidate)
-        if resp is not None and resp.status_code < 400 and resp.text:
+        if resp is None:
+            kind = _worst_kind(kind, getattr(client, "last_error_kind", None) or "other")
+            continue
+        problem = classify_response(resp)
+        if problem is None and resp.text:
             break
+        kind = _worst_kind(kind, problem or "other")
         resp = None
     if resp is None:
-        snap.errors.append("homepage unreachable")
+        snap.error_kind = kind or "other"
+        snap.errors.append(f"homepage unreachable ({snap.error_kind})")
         return snap
 
     snap.final_url = str(resp.url)

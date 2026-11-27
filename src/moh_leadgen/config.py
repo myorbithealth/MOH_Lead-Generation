@@ -48,6 +48,17 @@ class Settings:
     anthropic_key: str = field(default_factory=lambda: _env("ANTHROPIC_API_KEY"))
     google_places_key: str = field(default_factory=lambda: _env("GOOGLE_PLACES_API_KEY"))
 
+    # Claude models. Per-site extraction and search run on every lead, so they default to Sonnet
+    # (half Opus' price); override per run with LEADGEN_LLM_MODEL / LEADGEN_SEARCH_MODEL.
+    llm_model: str = field(default_factory=lambda: _env("LEADGEN_LLM_MODEL", "claude-sonnet-5-5"))
+    search_model: str = field(default_factory=lambda: _env("LEADGEN_SEARCH_MODEL", "claude-sonnet-5-5"))
+
+    # Discovery: a safety cap on how many candidates one source may yield per run (known ones
+    # included), so a crt.sh or PublicWWW pull stays bounded even when nothing new turns up.
+    discovery_scan_limit: int = field(
+        default_factory=lambda: int(_env("LEADGEN_DISCOVERY_SCAN_LIMIT", "5000"))
+    )
+
     # Crawler
     db_path: Path = field(default_factory=lambda: Path(_env("LEADGEN_DB", "./leads.db")))
     user_agent: str = field(

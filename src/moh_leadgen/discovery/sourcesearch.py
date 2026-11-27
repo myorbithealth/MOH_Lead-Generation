@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterator
+from urllib.parse import quote
 
 import httpx
 
@@ -25,13 +26,29 @@ from .base import DiscoverySource
 log = logging.getLogger(__name__)
 
 
+def _marker_pairs(markers: dict[str, list[str] | str]) -> Iterator[tuple[str, str]]:
+    """(platform, marker) for every marker; a bare string still works for one-marker callers."""
+    for platform, value in markers.items():
+        for marker in [value] if isinstance(value, str) else value:
+            yield platform, marker
+
+
 class PublicWWWDiscovery(DiscoverySource):
     name = "publicwww"
 
-    def __init__(self, markers: dict[str, str], source: LeadSource = "competitor_platform"):
-        """markers: {platform name: source snippet to search for}"""
+    def __init__(
+        self,
+        markers: dict[str, list[str] | str],
+        source: LeadSource = "competitor_platform",
+        transport: httpx.BaseTransport | None = None,
+    ):
+        """markers: {platform name: source snippets to search for}. One search per snippet.
+
+        `transport` exists so tests can inject httpx.MockTransport instead of hitting the paid API.
+        """
         self.markers = markers
         self.source = source
+        self.transport = transport
 
     def available(self) -> bool:
         return bool(settings.publicwww_key)
@@ -39,9 +56,11 @@ class PublicWWWDiscovery(DiscoverySource):
     def discover(self, limit: int | None = None) -> Iterator[Candidate]:
         seen: set[str] = set()
         count = 0
-        with httpx.Client(timeout=120, follow_redirects=True) as client:
-            for platform, marker in self.markers.items():
-                url = f"https://publicwww.com/websites/%22{marker}%22/"
+        with httpx.Client(timeout=120, follow_redirects=True, transport=self.transport) as client:
+            for platform, marker in _marker_pairs(self.markers):
+                # quote everything: markers contain spaces and slashes (template asset paths)
+                phrase = quote(f'"{marker}"', safe="")
+                url = f"https://publicwww.com/websites/{phrase}/"
                 try:
                     r = client.get(url, params={"export": "csvu", "key": settings.publicwww_key})
                 except httpx.HTTPError as exc:
@@ -69,9 +88,15 @@ class PublicWWWDiscovery(DiscoverySource):
 class NerdyDataDiscovery(DiscoverySource):
     name = "nerdydata"
 
-    def __init__(self, markers: dict[str, str], source: LeadSource = "competitor_platform"):
+    def __init__(
+        self,
+        markers: dict[str, list[str] | str],
+        source: LeadSource = "competitor_platform",
+        transport: httpx.BaseTransport | None = None,
+    ):
         self.markers = markers
         self.source = source
+        self.transport = transport
 
     def available(self) -> bool:
         return bool(settings.nerdydata_key)
@@ -80,9 +105,11 @@ class NerdyDataDiscovery(DiscoverySource):
         seen: set[str] = set()
         count = 0
         with httpx.Client(
-            timeout=120, headers={"Authorization": f"Bearer {settings.nerdydata_key}"}
+            timeout=120,
+            headers={"Authorization": f"Bearer {settings.nerdydata_key}"},
+            transport=self.transport,
         ) as client:
-            for platform, marker in self.markers.items():
+            for platform, marker in _marker_pairs(self.markers):
                 try:
                     r = client.get(
                         "https://api.nerdydata.com/v1/search", params={"query": marker, "limit": 1000}
