@@ -369,7 +369,7 @@ One Smartlead campaign per segment: `glp1_competitor`, `trt_peptides`, `pharmacy
 | 3 | 7 | Angle switch: the arm's alternative pitch (speed to launch, cost versus current platform, compliance) | 50 to 70 words |
 | 4 | 14 | Close the loop: short, offers the booking link, says we will stop | 30 to 50 words |
 
-Tier B gets steps 1 and 4 only, addressed to the business, not a person.
+Tier B gets steps 1 and 4 only, addressed to the business, not a person. Its step 1 is a template filled from the lead record (company name, platform, vertical), with no per-contact Sonnet call.
 
 Stop rules: any reply pauses the sequence (Smartlead stop-on-reply). Out-of-office pauses until `snooze_until` then resumes at the same step.
 
@@ -631,7 +631,7 @@ $1,500/mo test budget. B2B Facebook CPL benchmark $145 (median $179, retargeting
 | Mailforge SMTP pool (stage 2) | $0 | 60 slots x $3 + 20 domains x $14/yr = $203 | https://www.mailforge.ai/pricing |
 | Hunter | Growth $149 (10,000 credits; $104 annual) | Scale $299 (25,000 credits; $209 annual) | https://hunter.io/pricing |
 | Cal.com Teams, 3 seats | $36 (annual billing, $432/yr; $48 monthly) | $36 | https://cal.com/pricing |
-| Anthropic Claude API | about $24 (1,650 Sonnet 5.5 openers at $0.0112, 132 Haiku 5.5 classifications, weekly Opus 5.5) | about $100 with the Batch API (16,500 openers at $0.0056; about $192 realtime) | https://platform.claude.com/docs/en/about-claude/pricing |
+| Anthropic Claude API | about $24 (1,650 Tier A Sonnet 5.5 openers at $0.0112; Tier B step 1 is templated with no per-contact Sonnet call; about 120 Haiku 5.5 classifications at $0.0002; weekly Opus 5.5 run) | about $100 with the Batch API (16,500 Tier A openers at $0.0056; about $192 realtime) | https://platform.claude.com/docs/en/about-claude/pricing |
 | Supabase Pro (via Lovable Cloud; billing equivalence unverified) | $25 | $40 (Small compute) | https://supabase.com/pricing |
 | GitHub Actions | $5 overage allowance (daily 45 to 60 min run uses 1,350 to 1,800 of about 2,000 included minutes) | $10 | https://docs.github.com/en/billing/managing-billing-for-your-products/about-billing-for-github-actions |
 | Fly.io worker (only if stage-2 triggers fire) | $0 | $7 (shared-cpu-1x 1 GB $6.70) | https://docs.fly.io/about/pricing |
@@ -744,35 +744,53 @@ Day 5
 - Portal views (a Lovable prompt, no repo code): Replies inbox with draft approval, My tasks with SLA timers, Meetings with outcome buttons, Outreach funnel by variant and segment, Deliverability by domain, Suppressions.
 - Go/no-go checklist: DNS preflight passes on all 6 domains, footer linter passes, suppression check wired, classification round-trip tested, booking round-trip tested.
 
-### Week 2: first sends and the first meeting
+### Week 2: first sends. Sending days 1 to 5.
 
-Day 6
+Per-mailbox caps follow the table in section 5.3 (days 1 to 2 cap 5, days 3 to 5 cap 10, days 6 to 9 cap 15, day 10 onward cap 20). Sending day 1 is Day 6, a Monday. No sends on weekends.
 
-- `leadgen outreach enroll` goes live in the daily Action. Gate: enriched, score >= 50, contact email status in (verified, provider, on_site), `has_mx` not false, portal status in (new, reviewed), not suppressed, at most 2 contacts per company, one active campaign per domain. Tier A only today. Sonnet 5.5 openers rendered realtime (75 leads take under 5 minutes).
-- Mailbox cap 5. About 90 sends.
+Day 6 (sending day 1)
 
-Day 7
+- `leadgen outreach enroll` goes live in the daily Action. Gate: enriched, score >= 50, contact email status in (verified, provider, on_site), `has_mx` not false, portal status in (new, reviewed), not suppressed, at most 2 contacts per company, one active campaign per domain, and the enrollment cap of sum(active `mailboxes.daily_cap`) minus follow-ups due today (on the first days every send is a step 1, so the whole cap goes to new contacts). Tier A only today. Sonnet 5.5 openers rendered in the Action (under 100 leads take under 5 minutes).
+- Cap 5 per mailbox. About 90 sends, all step 1.
 
-- Review bounces per mailbox. First replies classified end to end. Reps approve the first drafts in the portal; approved replies go out through Smartlead's reply-from-inbox endpoint.
+Day 7 (sending day 2)
 
-Day 8
+- Cap 5. About 90 sends. Review bounces per mailbox. First replies classified end to end. Reps approve the first drafts in the portal; approved replies go out through Smartlead's `reply-email-thread` endpoint from the sending mailbox.
+
+Day 8 (sending day 3)
 
 - Cap 10 if bounce <= 1% and complaints < 0.1%. About 180 sends. Tier B campaign starts at 20% of volume.
 
-Day 9
+Day 9 (sending day 4)
 
-- Cap 15. About 270 sends. Check SLA timers; confirm Slack notifications reach the right rep.
+- Cap 10. Step 2 of the Day 6 cohort goes out. Check SLA timers; confirm Slack notifications reach the right rep.
 
-Day 10
+Day 10 (sending day 5)
 
-- Cap 20. Capacity 360, target 300. First weekly routine (section 7.4). Check Actions minutes used. Confirm every LEAD_UNSUBSCRIBED has a suppression row. First demo booked is expected in week 2 or 3 at the base case (about 33 booked per month at steady state).
+- Cap 10. Check Actions minutes used. Confirm every LEAD_UNSUBSCRIBED has a suppression row. Read the Tier A inventory: about 500 contacts will have been enrolled this week, so the Tier A pool from the existing 1,471 leads (450 to 650 after Hunter) is close to spent. New Tier A from here comes from the Day 3 discovery run and the daily Hunter step.
 
-### Weeks 3 to 6: learning loop and lead supply
+First demo booked: week 2 or 3 at the base case, weeks 4 to 6 at the pessimistic case. Steady-state bookings at the blended base case are about 30 per month (section 10.4, Table 2).
+
+### Week 3: ramp to 300/day. Sending days 6 to 10.
+
+Day 11 (sending day 6, Monday)
+
+- Cap 15 if bounce <= 1% and complaints < 0.1%. About 270 sends. First weekly routine (section 7.4), including the inventory gate.
+- Order the second mailbox cohort (30 fresh Zapmail Google on 10 domains) so it is warm by week 6. The inventory gate applies before it sends.
+
+Days 12 to 14 (sending days 7 to 9)
+
+- Cap 15. Step 3 of the Day 6 cohort goes out on Day 13. If Tier A inventory is below two weeks of runway, the Tier B share floats up to 40% rather than padding Tier A with unverified addresses.
+
+Day 15 (sending day 10, Friday)
+
+- Cap 20 if the gates still hold. Capacity 360, target 300. Caps stay at 20 until weekly seed placement tests run and pass at 80%.
+
+### Weeks 4 to 6: learning loop and lead supply
 
 - `outreach pull-stats` copies Smartlead per-variant counts nightly. Retire and promote rules go live. First Opus proposal run in week 5. Equal allocation until each arm has 100 to 200 sends.
 - `scoring_weights` feedback term on from week 6 with the 0.5 to 2.0 clamp.
 - Discovery expansion: multi-marker PublicWWW signatures, med-spa embeds, LegitScript on runners, `also_found_via` corroboration, `leadgen ingest` for CSV seeds. Target 3,000+ portal leads by end of week 6.
-- Order the second mailbox cohort (30 fresh Zapmail Google on 10 domains) in week 3 so it is warm by week 6. Inventory gate applies before it sends.
 - Stage-2 readiness check: Edge Function error rate, Postgres connections, Action runtime.
 
 ### Weeks 5 to 8: Meta in union with email
