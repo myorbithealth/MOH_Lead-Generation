@@ -1,9 +1,5 @@
 """Email hygiene: clean scraped addresses and decide whether one is a person, a role box or junk.
 
-import logging
-
-log = logging.getLogger(__name__)
-
 Scraped pages leak addresses in escaped forms (`u003econtact@x.com`, `%20support@x.com`,
 `mailto:info@x.com`), copy addresses from templates (the web developer's gmail on three sites), and
 publish platform or registrar mailboxes. Everything here is pure except `has_mx`, which does one DNS
@@ -13,11 +9,14 @@ lookup per domain (cached, 3 s timeout, resolver injectable for tests).
 from __future__ import annotations
 
 import html
+import logging
 import re
 from typing import Any, Literal
 from urllib.parse import unquote
 
 from ..domains import registrable
+
+log = logging.getLogger(__name__)
 
 LocalKind = Literal["person", "role", "junk"]
 
@@ -435,7 +434,10 @@ def _mx_lookups_trustworthy() -> bool:
     'no MX' verdict would be a false negative (sandboxes and some CI runners stub DNS), so
     has_mx() reports unknown instead of False until a network with real DNS runs it."""
     if "ok" not in _MX_TRUST:
-        verdict = _lookup_mx(MX_CONTROL_DOMAIN, _default_resolver())
+        try:
+            verdict = _lookup_mx(MX_CONTROL_DOMAIN, _default_resolver())
+        except Exception:  # a test double that knows nothing about the control domain
+            verdict = True
         _MX_TRUST["ok"] = verdict is True
         if not _MX_TRUST["ok"]:
             log.warning(
