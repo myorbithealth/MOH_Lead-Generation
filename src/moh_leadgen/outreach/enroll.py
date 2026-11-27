@@ -247,8 +247,13 @@ def load_variants(sink: Any | None) -> dict[str, dict[int, list[Variant]]]:
         steps: dict[int, list[Variant]] = {}
         for v in [p for p in portal if p.segment == key]:
             steps.setdefault(v.sequence_step, []).append(v)
+        # Built-in copy only for steps the portal does not cover with a live arm. Decide coverage
+        # before adding anything, or the first built-in arm would shadow its siblings.
+        covered = {
+            step for step, arms in steps.items() if any(x.status in ("active", "control") for x in arms)
+        }
         for v in campaign_variants(key):
-            if not any(x.status in ("active", "control") for x in steps.get(v.sequence_step, [])):
+            if v.sequence_step not in covered:
                 steps.setdefault(v.sequence_step, []).append(v)
         out[key] = steps
     return out

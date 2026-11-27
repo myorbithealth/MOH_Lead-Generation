@@ -169,3 +169,32 @@ Freemail domains (gmail.com and similar) are never suppressed as a whole domain.
 ## Copy voice (2026-11-27)
 
 Every step-1 email is: greeting, a two or three sentence paragraph written by Claude about that client (what they sell and run today, the one cost or friction that setup creates, a short bridge), then the offer block for the variant (price-beat guarantee on consults and medication or we integrate their pharmacy at no charge; one physician fee per patient covering every medication instead of a consult fee per med; no markup on medication; they keep processor, data and margin; multiple refills; everything customisable), the 20-minute ask, the signature and the CAN-SPAM footer. The paragraph is validated before use: 20 to 75 words, no AI filler phrases, no exclamation marks, no questions, no name, no MyOrbit mention, no medical outcome claims; a failed paragraph is regenerated once and then the deterministic fallback is used. Review a sample with `leadgen outreach enroll --dry-run` before raising the daily cap.
+
+## 2026-11-27 evening: mailbox order and launch sequence
+
+- SmartSenders order `SS-3639018916019-681950-30` was placed in the Smartlead UI (Stripe receipt
+  #2009-1026, "domain + mailbox", upfront). Smartlead's confirmation email says delivery takes
+  24 to 48 hours and that pre-warmed mailboxes need no warm-up ramp. Track it under
+  Email Accounts > SmartSender Orders; the API has no order-status endpoint (every
+  `/smart-senders/orders*` path is 404).
+- API purchases (support request #431448): Smartlead requires a short verification call before
+  `place-order` works for an account. Support (Abigail) is scheduling it; our availability
+  (PST, any time) and phone are on the thread. The six brand-variant domains stay reserved
+  under the account meanwhile. Until then, extra domains are bought in the UI.
+- Launch automation: a scheduled task bound to this session
+  (`trig_01Rd6GC8DjhwQN3aunqtE5C4`, every 4 h) checks `/email-accounts`. On delivery it runs the
+  scratchpad `attach_mailboxes.py` (from_name, 20 sends/day per mailbox, warm-up on, attach to
+  all seven "MOH outbound" campaigns), writes `SMARTLEAD_EMAIL_ACCOUNT_IDS` to `.env`, runs
+  `outreach sync-campaigns`, then the first real `outreach enroll --daily-cap 60` and reports
+  who was enrolled. It disables itself afterwards.
+- Dry run of that first enrolment (no model calls): 15 named contacts at 11 companies, all
+  glp1_competitor except one med_spa_clinic, 60/60 sends committed, 389 companies over cap and
+  waiting for the daily budget.
+- Two fixes found by the dry run, both covered by tests:
+  - `load_variants` kept only the first built-in arm per step when the portal had no variant
+    rows, so every step-1 email would have been `price_beat` and the A/B test could never
+    start. Coverage is now decided per step before the built-in copy is added.
+  - `_shares_brand` missed boxes that are a long prefix of the brand (`clearpath@clearpathmetabolic.com`);
+    those are role mailboxes now. Short first-name prefixes (`chris@christinemedspa.com`) stay people.
+- The portal `variants` table is still empty: `sync-campaigns` fills it (the scheduled task runs
+  that before enrolling). Once rows exist the portal copy wins over the built-in one.

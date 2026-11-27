@@ -341,6 +341,9 @@ def test_brand_and_short_boxes_are_roles():
 
     assert c("zaddyhealth@zaddy.io", None, "zaddy.io") == "role"
     assert c("glamslimhcg@gmail.com", None, "glamslimrx.com") == "role"
+    assert c("clearpath@clearpathmetabolic.com", None, "clearpathmetabolic.com") == "role"
+    assert c("chris@christinemedspa.com", None, "christinemedspa.com") == "person"
+    assert c("andrea@andreasclinic.com", None, "andreasclinic.com") == "person"
     assert c("rt@telepurehealth.com", None, "telepurehealth.com") == "role"
     assert c("nclientcare@arealchangehealth.com", None, "arealchangehealth.com") == "role"
     assert c("hipaa@renuviarx.com", None, "renuviarx.com") == "role"

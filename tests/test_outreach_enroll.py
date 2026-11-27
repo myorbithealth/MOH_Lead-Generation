@@ -783,3 +783,35 @@ def test_suppress_domain_everywhere(store, tmp_path, settings_env):
     assert fake.calls("POST", "/add-domain-block-list") == [{"domain_block_list": ["x@betaclinic.com"]}]
     with pytest.raises(ValueError):
         enroll_mod.suppress("a@b.com", "spam", store=store)
+
+
+def test_load_variants_builtin_copy_keeps_every_step1_arm():
+    """Regression: the built-in fallback used to keep only the first arm of each step."""
+    steps = enroll_mod.load_variants(None)["glp1_competitor"]
+    assert {v.name for v in steps[1]} == {"price_beat", "own_the_stack", "better_medicine", "control"}
+    assert sum(1 for v in steps[1] if v.status == "control") == 1
+    rng = random.Random(3)
+    picks = Counter(enroll_mod.choose_variant(steps[1], rng).name for _ in range(400))
+    assert len(picks) == 4
+
+
+def test_load_variants_portal_rows_replace_builtin_for_that_step_only():
+    class Sink:
+        def fetch_variants(self):
+            return [
+                {
+                    "id": "glp1_competitor:1:portal_only",
+                    "segment": "glp1_competitor",
+                    "sequence_step": 1,
+                    "name": "portal_only",
+                    "angle": "plain",
+                    "subject": "s",
+                    "body": "b",
+                    "hypothesis": "h",
+                    "status": "active",
+                }
+            ]
+
+    steps = enroll_mod.load_variants(Sink())["glp1_competitor"]
+    assert [v.name for v in steps[1]] == ["portal_only"]
+    assert len(steps[2]) >= 1  # built-in copy still fills the uncovered steps

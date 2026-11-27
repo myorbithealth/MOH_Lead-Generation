@@ -373,6 +373,10 @@ def _shares_brand(flat: str, label: str) -> bool:
     """zaddyhealth ~ zaddy, glamslimhcg ~ glamslimrx: the box is named after the company."""
     if len(label) >= 4 and (flat == label or label in flat):
         return True
+    # clearpath ~ clearpathmetabolic: the box is the first half (or more) of the brand. Short
+    # prefixes stay people (chris@christinemedspa, andrea@andreasclinic).
+    if len(flat) >= 6 and label.startswith(flat) and len(flat) >= 0.5 * len(label):
+        return True
     common = 0
     for a, b in zip(flat, label, strict=False):
         if a != b:
