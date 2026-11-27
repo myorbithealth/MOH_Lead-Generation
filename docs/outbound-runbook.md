@@ -225,3 +225,39 @@ Every step-1 email is: greeting, a two or three sentence paragraph written by Cl
   EMAIL_SENT webhook in the portal. Remove the test lead (or pause that campaign) after step 1.
 - The 4-hourly delivery check `trig_01Rd6GC8DjhwQN3aunqtE5C4` is disabled (it would have
   enrolled a second batch).
+
+## 2026-11-27 18:00 UTC: pre-send reviews, persona senders, re-render
+
+- Sender identity (user decision): emails are sent and signed by the mailbox persona, never as
+  Shubh. Mailboxes are back to their own names (Paul Scott, Weston Lawson, Grant Lewis) with
+  signature "<name> / MyOrbit Health / myorbithealth.com". The sign-off and legal footer live in
+  the Smartlead sequence template (`%signature%` + footer with `{{company_name_legal}}`,
+  `{{postal_address}}` and Smartlead's `%unsubscribe-text%`), so rendered step bodies carry
+  neither. Reply drafts drop their `{{sender_name}}` line and go out with the mailbox signature
+  (`reply_add_signature` defaults to true). `LEADGEN_OUTREACH_SENDER_NAME` is now empty.
+- Review pass 1 (Opus panel, 11 companies, each fact-checked against its website): 7 of 11 had
+  blocking issues, almost all one cause: the seeded platform guess (Cuvo for 3 companies, RxAve,
+  MD Integrations, "checkout runs on Telegra MD") was written as fact. Also a scraped page title
+  as a company name (Rose MedSpa) and step 3 stating every prospect's cost structure as certain.
+  Fixes shipped: `lead_platform()` names a platform only when our crawl fingerprinted it;
+  opener prompt treats the platform as a guess and rejects "runs on / takes a cut" claims;
+  prescriber contacts are not told their consults are not real; step 2/3 hedged; price_beat
+  subject is "your per-consult costs"; `display_company_name()` strips page titles.
+- Review pass 2 on the re-rendered copy: 8 of 11 clean. Remaining fit problems were practices
+  with in-house prescribers (Cache Medical, Rose MedSpa) where "our physicians do the consults"
+  reads as replacing the reader, and Luvo, whose pricing page bundles the consult. Hand-fixed per
+  lead (coverage in unlicensed states, medication price and out-of-area patients as the angle),
+  Brynne (second Cache Medical prescriber) removed so a three-provider clinic hears from us once.
+  Lesson for the system: provider-owned practices need their own sequence (capacity, state
+  coverage, pharmacy price), not the platform-replacement pitch. Not built yet.
+- Second contacts at two-contact companies (Skin Clique, VitalCore, Olive) are paused and get
+  resumed with a two-day delay after START, so identical copy does not hit two inboxes at once.
+- Live tests to shubh@: test 2 landed in the inbox from grant@ with clean plain-text rendering,
+  the persona signature and the footer, but no unsubscribe link despite `unsubscribe_text` and
+  `add_unsubscribe_tag`; test 3 carries `%unsubscribe-text%` in the footer to confirm the link.
+- Scratch tooling: `rerender_batch.py` (re-render the batch from the store with corrected facts
+  and push to Smartlead + portal drafts) and `review/rendered_leads_v*.json` snapshots.
+- Follow-ups: the Cuvo PublicWWW signature over-matches (3 false positives in 11): rebuild or
+  drop it before the next discovery run; store-wide, leads whose platform came only from
+  `publicwww:signature` or a seed file should have `competitor_platform` demoted to a hypothesis
+  (copy already ignores unconfirmed guesses); follow-up booking links reuse the step-1 UTM tag.
