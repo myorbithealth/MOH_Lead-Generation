@@ -172,7 +172,12 @@ class SmartleadClient:
                 last = f"{type(exc).__name__}"
             else:
                 if response.status_code < 400:
-                    return response.json() if response.content else {}
+                    if not response.content:
+                        return {}
+                    try:
+                        return response.json()
+                    except ValueError:  # DELETE .../leads/{id} answers a bare "success"
+                        return {"ok": True, "raw": response.text[:200]}
                 last = f"{response.status_code}: {response.text[:300]}"
                 if response.status_code != 429 and response.status_code < 500:
                     raise SmartleadError(f"smartlead {method} {path} -> {last}", response.status_code)

@@ -913,3 +913,15 @@ def test_lead_platform_requires_the_crawl_to_confirm_the_guess():
     )
     assert lead_platform(confirmed) == "Telegra MD"
     assert lead_platform(Lead(domain="z.com")) is None
+
+
+def test_smartlead_client_tolerates_a_plain_text_success_body():
+    import httpx
+
+    from moh_leadgen.outreach.smartlead import SmartleadClient
+
+    def handler(request):
+        return httpx.Response(200, text="success")
+
+    client = SmartleadClient("k", transport=httpx.MockTransport(handler))
+    assert client.request("DELETE", "/campaigns/1/leads/2") == {"ok": True, "raw": "success"}
