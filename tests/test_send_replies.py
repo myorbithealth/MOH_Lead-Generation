@@ -100,8 +100,8 @@ def test_happy_path_sends_patches_and_logs_activity():
     [body] = rec.replies()
     assert body == {
         "email_stats_id": "stats-abc",
-        # the persona mailbox signs via Smartlead's signature, so the draft's sign-off line is dropped
-        "email_body": "Hi Dana,<br>Here is my calendar: https://cal.example/shubh",
+        # this draft carries a literal name, so it is kept; the persona mailbox's signature is added too
+        "email_body": "Hi Dana,<br>Here is my calendar: https://cal.example/shubh<br><br>Shubh",
         "add_signature": True,
         "to_email": "dana@brand.com",
         "to_first_name": "Dana",
