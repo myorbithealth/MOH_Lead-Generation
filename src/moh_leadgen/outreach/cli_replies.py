@@ -125,3 +125,23 @@ def learn_cmd(
         console.print(f"[yellow]rejected[/yellow] {note}")
     suffix = " (dry run, nothing written)" if dry_run else f"; {report['applied']} status change(s) applied"
     console.print(f"{len(report['proposed'])} proposal(s){suffix}")
+
+
+@outreach_app.command("send-approved")
+def send_approved_cmd(
+    limit: int = typer.Option(100, help="Most approved drafts to send this run"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be sent; send and write nothing"),
+):
+    """Send reply drafts approved in the portal through Smartlead, in the lead's existing thread."""
+    from .send_replies import send_approved
+    from .smartlead import SmartleadClient
+
+    portal = _portal()
+    try:
+        smartlead = SmartleadClient()
+    except RuntimeError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    stats = send_approved(portal, smartlead, limit=limit, dry_run=dry_run)
+    console.print(stats)
+    if dry_run:
+        console.print("(dry run, nothing sent or written)")

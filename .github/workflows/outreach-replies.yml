@@ -5,8 +5,9 @@ name: Outreach replies
 # Classification needs only the portal. pull-stats matches Smartlead rows to leads through the
 # local store, so the latest leads.db is restored read-only (never saved back: the daily workflow
 # owns it). Campaign ids come from app_settings 'outreach'. Each step runs only when its secrets
-# are set. The hourly schedule (minute 17) runs only the SendBlue texting steps: booking reminders
-# and inbound texts (see docs/outbound-sendblue.md); the 6-hourly one runs everything.
+# are set. The hourly schedule (minute 17) runs only the sending steps: reply drafts reps approved
+# in the portal (sent through Smartlead), then the SendBlue booking reminders and inbound texts
+# (see docs/outbound-sendblue.md); the 6-hourly one runs everything.
 on:
   schedule:
     - cron: "0 */6 * * *"
@@ -63,6 +64,9 @@ jobs:
       - name: Pull Smartlead stats
         if: always() && env.HOURLY_ONLY != 'true' && env.SUPABASE_SERVICE_ROLE_KEY != '' && env.SMARTLEAD_API_KEY != ''
         run: leadgen outreach pull-stats
+      - name: Send approved reply drafts (Smartlead)
+        if: always() && (env.SUPABASE_SERVICE_ROLE_KEY != '' || env.LEADGEN_PORTAL_TOKEN != '') && env.SMARTLEAD_API_KEY != ''
+        run: leadgen outreach send-approved --limit 100
       - name: Inbound texts (SendBlue)
         if: always() && env.SUPABASE_SERVICE_ROLE_KEY != '' && env.SENDBLUE_API_KEY_ID != ''
         run: leadgen outreach text inbound --limit 200

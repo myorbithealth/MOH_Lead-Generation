@@ -64,6 +64,7 @@ named contact costs 4 sends, a role mailbox 2.
 | --- | --- | --- |
 | `leadgen.yml` | daily 06:00 UTC, and on dispatch | `leadgen daily`: discover, enrich, retry failed crawls, Hunter people pass, score, sync portal, enroll, classify, pull-stats; on Mondays also `outreach learn --propose 3` |
 | `outreach-replies.yml` | every 6 hours, and on dispatch | `leadgen outreach classify --limit 500`, then `leadgen outreach pull-stats` |
+| `outreach-replies.yml` | hourly (minute 17) | `leadgen outreach send-approved --limit 100`, then the SendBlue text steps |
 
 The `people` step (`leadgen people --limit 150`, skipped without `HUNTER_API_KEY`) runs Hunter's
 Domain Search on enriched leads (score 40 and up) that have no named person email yet, keeps up to
@@ -117,6 +118,8 @@ the cap without a person agreeing.
 ## 6. What each disposition does
 
 A human sees every task and approves every drafted reply before it is sent.
+
+The portal's Approve button only marks the draft approved; the hourly `outreach-replies.yml` job (`leadgen outreach send-approved --limit 100`) sends it from the Smartlead mailbox that started the thread. A draft Smartlead rejects is marked `send_failed` with the reason, and one that hits a Smartlead outage stays approved for the next run.
 
 | Disposition | Portal effect | Smartlead |
 | --- | --- | --- |
