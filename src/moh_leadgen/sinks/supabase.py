@@ -15,7 +15,7 @@ from typing import Any
 
 import httpx
 
-from ..config import settings
+from ..config import portal_http, settings
 from ..models import Lead
 from ..outreach.models import suppression_update
 
@@ -48,19 +48,11 @@ class SupabaseSink:
         transport: httpx.BaseTransport | None = None,
         retry_delay: float = 1.0,
     ):
-        self.url = (url or settings.supabase_url).rstrip("/")
-        self.key = key or settings.supabase_key
-        if not self.url or not self.key:
-            raise RuntimeError(
-                "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for the Supabase sink"
-            )
-        headers = {"apikey": self.key, "Content-Type": "application/json"}
-        if not self.key.startswith("sb_"):
-            headers["Authorization"] = f"Bearer {self.key}"
+        base_url, headers = portal_http(url, key)
+        self.url = base_url
+        self.key = key or settings.supabase_key or settings.portal_token
         self.retry_delay = retry_delay
-        self.client = httpx.Client(
-            base_url=f"{self.url}/rest/v1", headers=headers, timeout=60, transport=transport
-        )
+        self.client = httpx.Client(base_url=base_url, headers=headers, timeout=60, transport=transport)
 
     # ------------------------------------------------------------------ transport
     def _call(self, method: str, path: str, **kwargs: Any) -> httpx.Response:

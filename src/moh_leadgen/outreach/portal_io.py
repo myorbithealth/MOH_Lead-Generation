@@ -17,7 +17,7 @@ from typing import Any
 
 import httpx
 
-from ..config import settings
+from ..config import portal_http, settings
 from .models import suppression_update
 
 log = logging.getLogger(__name__)
@@ -47,17 +47,11 @@ class PortalClient:
         transport: httpx.BaseTransport | None = None,
         retry_delay: float = 1.0,
     ):
-        self.url = (url or settings.supabase_url).rstrip("/")
-        self.key = key or settings.supabase_key or settings.supabase_anon_key
-        if not self.url or not self.key:
-            raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for the portal")
-        headers = {"apikey": self.key, "Content-Type": "application/json"}
-        if not self.key.startswith("sb_"):  # legacy JWT keys also go in Authorization
-            headers["Authorization"] = f"Bearer {self.key}"
+        base_url, headers = portal_http(url, key, allow_anon=True)
+        self.url = base_url
+        self.key = key or settings.supabase_key or settings.portal_token or settings.supabase_anon_key
         self.retry_delay = retry_delay
-        self.client = httpx.Client(
-            base_url=f"{self.url}/rest/v1", headers=headers, timeout=60, transport=transport
-        )
+        self.client = httpx.Client(base_url=base_url, headers=headers, timeout=60, transport=transport)
 
     # ------------------------------------------------------------------ transport
     def _send(self, method: str, path: str, **kwargs) -> httpx.Response:

@@ -27,6 +27,11 @@ class Settings:
     # Lovable Sales Portal (Supabase)
     supabase_url: str = field(default_factory=lambda: _env("SUPABASE_URL"))
     supabase_key: str = field(default_factory=lambda: _env("SUPABASE_SERVICE_ROLE_KEY"))
+    # Portal proxy: the portal's `pipeline-db` endpoint forwards PostgREST requests using the
+    # service role it holds server-side, so the pipeline only needs its own token (a row in
+    # public.api_clients holds the token's SHA-256). Preferred over a service-role key.
+    portal_proxy_url: str = field(default_factory=lambda: _env("LEADGEN_PORTAL_PROXY_URL"))
+    portal_token: str = field(default_factory=lambda: _env("LEADGEN_PORTAL_TOKEN"))
 
     # Meeting booking page handed to prospects (Google Calendar appointment schedule, Calendly, ...)
     booking_url: str = field(default_factory=lambda: _env("LEADGEN_BOOKING_URL"))
@@ -112,3 +117,33 @@ class Settings:
 
 
 settings = Settings()
+
+
+def portal_http(
+    url: str | None,
+    key: str | None,
+    *,
+    allow_anon: bool = False,
+) -> tuple[str, dict[str, str]]:
+    """(base_url, headers) for the portal: the pipeline-db proxy when configured, else PostgREST.
+
+    Proxy mode (LEADGEN_PORTAL_PROXY_URL + LEADGEN_PORTAL_TOKEN) wins unless an explicit url/key
+    pair is passed. Direct mode keeps the apikey/Authorization pair PostgREST expects.
+    """
+    if not url and not key and settings.portal_proxy_url and settings.portal_token:
+        base = settings.portal_proxy_url.rstrip("/")
+        return base, {
+            "Authorization": f"Bearer {settings.portal_token}",
+            "Content-Type": "application/json",
+        }
+    base = (url or settings.supabase_url).rstrip("/")
+    key = key or settings.supabase_key or (settings.supabase_anon_key if allow_anon else "")
+    if not base or not key:
+        raise RuntimeError(
+            "Set LEADGEN_PORTAL_PROXY_URL + LEADGEN_PORTAL_TOKEN, or SUPABASE_URL + "
+            "SUPABASE_SERVICE_ROLE_KEY, to reach the Sales Portal"
+        )
+    headers = {"apikey": key, "Content-Type": "application/json"}
+    if not key.startswith("sb_"):  # legacy JWT keys also go in Authorization
+        headers["Authorization"] = f"Bearer {key}"
+    return f"{base}/rest/v1", headers
