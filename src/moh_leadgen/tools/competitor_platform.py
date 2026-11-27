@@ -73,6 +73,36 @@ PLATFORM_OWNED = {
     "withkarpa.com",
     "cuvo.co",
     "rxave.health",
+    # Med spa / DPC / white-label telehealth vendors (docs/tools/competitor.md, verified 2026-11-27).
+    # Tenant subdomains (brand.akutehealth.com, brand.joinasher.com, ...) are platform-hosted and
+    # get re-keyed to the brand's own domain like brand.rimo.health.
+    "akutehealth.com",
+    "canvasmedical.com",
+    "joinmoxie.com",
+    "zenoti.com",
+    "aestheticrecord.com",
+    "myaestheticrecord.com",
+    "welliemd.com",
+    "wizlo.com",
+    "wizlo.health",
+    "joinasher.com",
+    "asherhealth.com",
+    "wellsync.com",
+    "upscript.com",
+    "upscripthealth.com",
+    "upscripthealth.org",
+    "hydreight.com",
+    "vsdhone.com",
+    # Vendor sites confirmed, but no tenant marker verified yet (no fingerprint): still never leads.
+    "spakinect.com",
+    "remedora.com",
+    "leguprx.com",
+    "nimbusrx.io",
+    "nimbusrx.com",
+    "altrohealth.com",
+    "altroapp.com",
+    "rxpnow.com",
+    "outfitmd.com",
 }
 
 # Source-code markers unique to each platform's storefront HTML (what source-search engines look for).
@@ -99,6 +129,17 @@ SOURCE_MARKERS: dict[str, list[str]] = {
     "Beluga Health": ["belugahealth.com"],
     "MD Integrations": ["mdintegrations.com"],
     "Qualiphy": ["qualiphy.me"],
+    "Aesthetic Record": ["myaestheticrecord.com/online-booking"],
+    "Akute Health": ["akutehealth.com/appointments", "portal.akutehealth.com"],
+    "Canvas Medical": ["canvas-pcp-assets"],
+    "Moxie": ["app.joinmoxie.com/booking", "app.joinmoxie.com/online-store"],
+    "Zenoti": ["zenoti.com/webstoreNew"],
+    "WellieMD": ["WellieMD Questionnaire App"],
+    "Wizlo": ["data-wz-brand"],
+    "Asher": ["asher-exit-calendar", "asher-footer-cta"],
+    "WellSync": ["wellsyncimagestorage", "wellsync-Iframe"],
+    "UpScript": ["upscripthealth.org", "ush-prod-s3-sfwp-images-public"],
+    "Hydreight": ["Hydreight"],
 }
 
 
@@ -153,6 +194,22 @@ COMPETITORS: dict[str, tuple[list[str], list[str]]] = {
         ],
     ),
     "Wheel": (["wheel.com"], ['"wheel" "virtual care" powered -site:wheel.com']),
+    # Med spa / DPC / white-label telehealth platforms (verified 2026-11-27, see the docs).
+    "Aesthetic Record": (["myaestheticrecord.com"], ['"myaestheticrecord.com/online-booking"']),
+    "Akute Health": (
+        ["akutehealth.com"],
+        ['"akutehealth.com/appointments"', '"portal.akutehealth.com" -site:akutehealth.com'],
+    ),
+    "Canvas Medical": (["canvasmedical.com"], ['"canvasmedical.com/app" -site:canvasmedical.com']),
+    # Moxie tenants are booking paths (app.joinmoxie.com/booking/<slug>), not subdomains.
+    "Moxie": ([], ['"app.joinmoxie.com/booking"', '"app.joinmoxie.com/online-store"']),
+    "Zenoti": (["zenoti.com"], ['"zenoti.com/webstoreNew" medspa']),
+    "WellieMD": (["welliemd.com"], ['"WellieMD Questionnaire"']),
+    "Wizlo": (["wizlo.com"], ['"data-wz-brand"', '"wizlo" telehealth -site:wizlo.com']),
+    "Asher": (["joinasher.com"], ['"joinasher.com" -site:joinasher.com']),
+    "WellSync": (["wellsync.com"], ['"wellsyncimagestorage"', '"powered by wellsync"']),
+    "UpScript": (["upscripthealth.org"], ['"upscripthealth.org" -site:upscripthealth.com']),
+    "Hydreight": ([], ['"Hydreight app" IV therapy -site:hydreight.com', '"VSDHOne" -site:vsdhone.com']),
 }
 
 

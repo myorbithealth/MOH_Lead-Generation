@@ -115,6 +115,41 @@ FINGERPRINTS: dict[str, tuple[bool, list[str]]] = {
     "Empower Pharmacy": (False, [r"empowerpharmacy\.com"]),
     "Strive Pharmacy": (False, [r"strivepharmacy\.com"]),
     "Hallandale Pharmacy": (False, [r"hallandalerx\.com"]),
+    # --- med spa / DPC / white-label telehealth platforms (verified 2026-11-27 on live tenant pages;
+    # tenant URLs and the exact strings are listed in docs/tools/competitor.md) ---
+    # Akute: DPC and men's-health clinics book through <clinic>.akutehealth.com/appointments.
+    "Akute Health": (True, [r"[a-z0-9\-]+\.akutehealth\.com", r"<title>Akute Health</title>"]),
+    # Canvas: tenant patient portals at <tenant>.canvasmedical.com/app/ load canvas-pcp-assets.
+    "Canvas Medical": (
+        True,
+        [r"[a-z0-9\-]+\.canvasmedical\.com", r"canvas-pcp-assets", r"canvas-medical\.s3"],
+    ),
+    # Moxie (med spa EMR + GFE + medical director): Book buttons go to app.joinmoxie.com/booking/<slug>.
+    "Moxie": (True, [r"app\.joinmoxie\.com/(?:booking|packages|online-store)/", r"joinmoxie\.com"]),
+    # Zenoti (booking/POS, like Boulevard): webstore links to <brand>.zenoti.com/webstoreNew/.
+    "Zenoti": (False, [r"[a-z0-9\-]+\.zenoti\.com/webstore", r"zenoti\.com"]),
+    # WellieMD: tenant intake apps (intake.<brand>.com) are titled "WellieMD Questionnaire".
+    "WellieMD": (True, [r"WellieMD Questionnaire", r"[a-z0-9\-]+\.welliemd\.com"]),
+    # Wizlo: tenant portals (portal.<brand>.com, CNAME portal.wizlo.com) carry data-wz-* attributes.
+    "Wizlo": (
+        True,
+        [r"data-wz-brand", r"data-wz-component", r"[a-z0-9\-]+\.wizlo\.com", r"wizlo-prod-portal"],
+    ),
+    # Asher: tenant GLP-1 landing pages on <brand>.joinasher.com.
+    "Asher": (True, [r"[a-z0-9\-]+\.joinasher\.com", r"asher-exit-calendar", r"asher-footer-cta"]),
+    # WellSync: <brand>.wellsync.com programs and custom-domain portals branded from wellsyncimagestorage.
+    "WellSync": (
+        True,
+        [
+            r"wellsyncimagestorage\.blob\.core\.windows\.net",
+            r"[a-z0-9\-]+\.wellsync\.com",
+            r"wellsync-Iframe",
+        ],
+    ),
+    # UpScript: partner storefronts are WordPress sites on <env>sfwp<brand>.upscripthealth.org.
+    "UpScript": (True, [r"upscripthealth\.(?:org|com)", r"ush-(?:prod|qa|uat|dev)-s3-sfwp"]),
+    # Hydreight / VSDHOne: IV and GLP-1 network; tenant booking widgets CNAME to *-bookingwidget-prod.
+    "Hydreight": (True, [r"hydreight", r"vsdhone\.com", r"(?:vsdigital|hydreight)-bookingwidget"]),
     # --- commerce / CMS / marketing stack (useful for sizing & outreach) ---
     "Shopify": (False, [r"cdn\.shopify\.com", r"myshopify\.com", r"Shopify\.theme"]),
     "WooCommerce": (False, [r"woocommerce", r"wc-ajax"]),
@@ -154,6 +189,10 @@ PLATFORM_ALIASES: dict[str, str] = {
     "MD": "MD Integrations",
     "Telegra": "Telegra MD",
     "WhiteLabel": "WhiteLabel MD",
+    "VSDHOne": "Hydreight",
+    "Hydreight / VSDHOne": "Hydreight",
+    "Canvas": "Canvas Medical",
+    "Akute": "Akute Health",
 }
 _ALIASES_LOWER = {alias.lower(): canonical for alias, canonical in PLATFORM_ALIASES.items()}
 
