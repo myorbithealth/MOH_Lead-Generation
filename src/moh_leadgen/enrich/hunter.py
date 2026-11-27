@@ -119,6 +119,19 @@ class VerifyResult:
     accept_all: bool | None = None
 
 
+@dataclass
+class FinderResult:
+    """One Email Finder answer. email None means Hunter found no address (no credit charged)."""
+
+    email: str | None = None
+    score: int | None = None  # Hunter confidence 0-100
+    position: str | None = None
+    linkedin: str | None = None
+    phone: str | None = None
+    accept_all: bool | None = None
+    verification_status: str | None = None
+
+
 def verification_outcome(result: VerifyResult | None) -> tuple[str | None, bool]:
     """(email_status to keep, accept_all flag); status None means drop the address.
 
@@ -257,25 +270,55 @@ class HunterClient:
         result = self.verify_email(email)
         return result.status if result else None
 
+    def email_finder(self, domain: str, first_name: str, last_name: str) -> FinderResult | None:
+        """GET /email-finder?domain=&first_name=&last_name=. 1 credit when an email is found.
+
+        None on a network or HTTP error; FinderResult(email=None) when Hunter found nothing.
+        Raises BudgetExhausted before the call when the budget has no room, HunterStop on a usage
+        limit or a rejected key.
+        """
+        self.budget.require(1)
+        params = {"domain": domain, "first_name": first_name, "last_name": last_name}
+        r = self._get("/email-finder", params)
+        if r is None:
+            return None
+        if r.status_code in (400, 404):  # no result for this person (or an unusable name)
+            return FinderResult()
+        if r.status_code != 200:
+            log.warning("hunter email-finder %s for %s: %s", r.status_code, domain, r.text[:200])
+            return None
+        data = r.json().get("data") or {}
+        email = (data.get("email") or "").strip().lower() or None
+        if not email:
+            return FinderResult()
+        self.budget.charge(1)
+        verification = data.get("verification") or {}
+        return FinderResult(
+            email=email,
+            score=int(data.get("score") or 0),
+            position=data.get("position") or None,
+            linkedin=data.get("linkedin_url") or None,
+            phone=data.get("phone_number") or None,
+            accept_all=data.get("accept_all"),
+            verification_status=verification.get("status") if isinstance(verification, dict) else None,
+        )
+
     def find_email(self, person: Person, domain: str) -> Person:
-        """GET /email-finder?domain=&first_name=&last_name=. 1 credit when an email is found."""
+        """Email Finder for one Person, filling it in place (kept for older callers)."""
         first, last = _split(person.name)
         if not (first and last) or not self.budget.can_spend(1):
             return person
         try:
-            r = self._get("/email-finder", {"domain": domain, "first_name": first, "last_name": last})
+            found = self.email_finder(domain, first, last)
         except HunterStop as exc:
             log.warning("hunter finder stopped: %s", exc)
             return person
-        if r is None or r.status_code != 200:
+        if found is None or not found.email:
             return person
-        data = r.json().get("data") or {}
-        if data.get("email"):
-            self.budget.charge(1)
-            person.email = data["email"].lower()
-            score = data.get("score") or 0
-            person.email_status = "verified" if score >= 90 else "provider"
-            person.confidence = max(person.confidence, score / 100)
-            person.linkedin = person.linkedin or data.get("linkedin_url")
-            person.phone = person.phone or data.get("phone_number")
+        person.email = found.email
+        score = found.score or 0
+        person.email_status = "verified" if score >= 90 else "provider"
+        person.confidence = max(person.confidence, score / 100)
+        person.linkedin = person.linkedin or found.linkedin
+        person.phone = person.phone or found.phone
         return person

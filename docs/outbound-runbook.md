@@ -78,6 +78,15 @@ then run in chunks such as `leadgen people --limit 500 --max-credits 1500`. Duri
 pattern-guessed owner emails are verified the same way when `HUNTER_API_KEY` is set
 (`LEADGEN_HUNTER_VERIFY=false` turns that off).
 
+After the Domain Search the daily step runs `leadgen people --finder --limit 100 --max-credits 150`:
+Hunter's Email Finder looks up the names we already hold (the owner, then crawled people; honorifics,
+middle names and credentials such as ", APRN" are dropped, single-word names are skipped) for leads
+that still lack a person email. A found address needs a Hunter score of 70 or more
+(`--min-finder-score`), is then verified like above, and fills the Person entry and, for the owner,
+`owner_email`. Each attempt is recorded in `source_detail.hunter.finder[name]` (checked_at, outcome,
+score) and that name is not looked up again for 90 days; a found address costs 1 credit and its
+verification 1 more, misses are free.
+
 `leadgen pull-portal [--since 2026-01-01] [--limit N] [--dry-run]` rebuilds `leads.db` from the
 portal's leads and contacts tables, keeps any local row that is newer than its portal row, and
 marks the pulled rows synced so `sync portal` does not push them straight back. `leadgen daily`

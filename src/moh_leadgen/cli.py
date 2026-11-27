@@ -179,11 +179,18 @@ def people(
         True, "--verify/--no-verify", help="Verify every candidate email before keeping it (1 credit each)"
     ),
     max_credits: int = typer.Option(300, help="Stop before this run spends more Hunter credits"),
+    finder: bool = typer.Option(
+        False,
+        "--finder",
+        help="Email Finder pass over names we already hold (owner, crawled people) instead of Domain Search",
+    ),
+    min_finder_score: int = typer.Option(70, help="--finder: keep addresses at or above this Hunter score"),
 ):
     """Hunter pass over enriched leads without a named person email: Domain Search, pick up to 2
-    decision-makers, verify, save. Leads checked in the last 90 days are skipped."""
+    decision-makers, verify, save. Leads checked in the last 90 days are skipped. With --finder,
+    Email Finder looks up the owner and crawled people by name instead (each name once per 90 days)."""
     from .enrich.hunter import CreditBudget, HunterClient
-    from .enrich.people_pass import credits_needed, run_people_pass
+    from .enrich.people_pass import credits_needed, finder_pass, run_people_pass
 
     if source in TOOLS:
         source = TOOLS[source].source
@@ -193,6 +200,40 @@ def people(
         if not settings.hunter_key:
             raise typer.BadParameter("HUNTER_API_KEY is not set")
         client = HunterClient(budget=CreditBudget(max_credits))
+
+    if finder:
+        try:
+            fstats = finder_pass(
+                store,
+                client,
+                limit=limit,
+                max_credits=max_credits,
+                min_score=min_finder_score,
+                verify=verify,
+                dry_run=dry_run,
+                source=source,
+                min_lead_score=min_score,
+                save=save_enriched,
+                on_lead=lambda lead, outcome: rprint(
+                    f"{lead.domain}: {outcome}  owner={lead.owner_name or '-'} "
+                    f"email={lead.owner_email or '-'}"
+                ),
+                echo=None,
+            )
+        finally:
+            if client:
+                client.close()
+        if dry_run:
+            for domain in fstats.domains:
+                rprint(f"would try {domain}")
+            rprint(
+                f"[bold]dry run[/]: {fstats.queued} lead(s) would be tried with Email Finder; "
+                f"{fstats.eligible} of {fstats.scanned} enriched leads have a name but no person email, "
+                f"{fstats.skipped_recent} tried in the last 90 days"
+            )
+            return fstats
+        rprint(f"[bold]people --finder[/]: {fstats.summary()}")
+        return fstats
 
     def _progress(lead: Lead, result) -> None:
         rprint(
@@ -499,8 +540,20 @@ def _daily_steps(
             dry_run=False,
             verify=True,
             max_credits=300,
+            finder=False,
+            min_finder_score=70,
         )
-        return stats.summary()
+        found = people(
+            limit=100,
+            source=None,
+            min_score=40,
+            dry_run=False,
+            verify=True,
+            max_credits=150,
+            finder=True,
+            min_finder_score=70,
+        )
+        return f"{stats.summary()} | {found.summary()}"
 
     def _sync() -> object:
         _require(has_portal, "SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set")
