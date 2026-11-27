@@ -478,6 +478,16 @@ Every assignment writes a `routing_log` row (rule id, reason) so reassignments a
 
 ---
 
+### 6.8 Texting channel (SendBlue)
+
+We already have a SendBlue API account. It is the warm channel, never the cold one.
+
+- Cold texts to scraped business mobiles are TCPA exposure, and SendBlue's published tiers do not offer cold-first outbound (outbound lines are quote-only and capped at 50 new contacts per day per line; https://docs.sendblue.com/limits, checked 2026-11-27).
+- Where it pays: demo confirmations and reminders to booked prospects (show rate is the largest lever in section 10), follow-ups to people who already replied to email and gave a mobile, and inbound texts, which go through the same classifier and routing as email replies.
+- Consent is captured on the Cal.com booking form (checkbox text, timestamp, phone) and stored on `contacts` (`sms_consent_at`, `sms_consent_source`). No consent, no text.
+- Wording: plain sentences, no "Reply STOP to opt out" boilerplate in any email or text. Stop, unsubscribe, cancel and similar words are still honoured automatically within minutes because carriers require it, and they write `suppressions` like an email unsubscribe.
+- Plumbing: `outreach/sendblue.py` (send-message with the `sb-api-key-id` and `sb-api-secret-key` headers), a `sendblue-webhook` Edge Function for inbound `receive` events into `webhook_events`, and a reminder job that texts booked prospects 24 hours and 1 hour before the demo. Start with one AI Agent line ($100/mo; https://sendblue.com/pricing). Built after the email path is live.
+
 ## 7. The self-improving loop
 
 ### 7.1 What is measured
