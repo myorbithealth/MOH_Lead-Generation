@@ -18,6 +18,7 @@ from typing import Any
 import httpx
 
 from ..config import settings
+from .models import suppression_update
 
 log = logging.getLogger(__name__)
 
@@ -249,16 +250,22 @@ def add_suppression(
     source: str,
     expires_at: datetime | None = None,
 ) -> None:
-    """One suppressions row (email-level when email is given, else domain-level), idempotently."""
+    """One suppressions row (email-level when email is given, else domain-level), idempotently.
+
+    An existing row for the same key is upgraded, not skipped, when the new reason is permanent
+    and the old row expires, or when the old row has already expired (see suppression_update).
+    """
     if email:
-        existing = portal.select("suppressions", {"email": f"ilike.{email}"}, limit=5)
-        if any((r.get("email") or "").lower() == email.lower() for r in existing):
-            return
+        rows = portal.select("suppressions", {"email": f"ilike.{email}"}, limit=5)
+        existing = [r for r in rows if (r.get("email") or "").lower() == email.lower()]
     elif domain:
         existing = portal.select("suppressions", {"domain": f"ilike.{domain}", "email": "is.null"}, limit=5)
-        if existing:
-            return
     else:
+        return
+    if existing:
+        changes = suppression_update(existing[0], reason, expires_at, datetime.now(UTC))
+        if changes:
+            portal.patch("suppressions", {"id": f"eq.{existing[0]['id']}"}, {**changes, "source": source})
         return
     insert_ignoring_duplicates(
         portal,

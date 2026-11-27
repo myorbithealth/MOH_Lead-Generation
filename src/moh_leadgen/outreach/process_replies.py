@@ -433,6 +433,9 @@ class ReplyProcessor:
         try:
             name = SMARTLEAD_CATEGORY.get(c.disposition)
             category_id = self._category_id(name) if name else None
+            if c.disposition == Disposition.out_of_office:
+                self._snooze_ooo(c, campaign_id, lead_id, category_id)
+                return
             if category_id is not None:
                 self.smartlead.set_lead_category(campaign_id, lead_id, category_id, pause=True)
             else:
@@ -447,6 +450,18 @@ class ReplyProcessor:
             if c.disposition in (Disposition.unsubscribe, Disposition.not_interested):
                 raise
             log.warning("Smartlead update failed for lead %s", lead_id, exc_info=True)
+
+    def _snooze_ooo(self, c: Classification, campaign_id, lead_id, category_id) -> None:
+        """Out of office: keep the sequence, resuming at the same step once the person is back.
+
+        Plan 6.5: pause until snooze_until, then resume. A plain pause would never be lifted
+        (nothing else resumes leads), so the lead is resumed with Smartlead's own delay instead.
+        """
+        if category_id is not None:
+            self.smartlead.set_lead_category(campaign_id, lead_id, category_id, pause=False)
+        snooze = self._snooze_until(c) or self.today
+        delay_days = max(1, (snooze - self.today).days)
+        self.smartlead.resume_lead(campaign_id, lead_id, delay_days=delay_days)
 
 
 def process_replies(

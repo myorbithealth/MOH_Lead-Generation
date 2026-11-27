@@ -17,6 +17,7 @@ import httpx
 
 from ..config import settings
 from ..models import Lead
+from ..outreach.models import suppression_update
 
 log = logging.getLogger(__name__)
 
@@ -30,6 +31,12 @@ def _in(values: list[Any]) -> str:
     """PostgREST in.() filter with every value double-quoted (emails contain dots and @)."""
     quoted = ",".join('"' + str(v).replace('"', '\\"') + '"' for v in values)
     return f"in.({quoted})"
+
+
+def _expiry(row: dict[str, Any]) -> datetime | None:
+    """A suppressions row's expires_at as a datetime (rows carry it as an ISO string)."""
+    value = row.get("expires_at")
+    return datetime.fromisoformat(value) if isinstance(value, str) else value
 
 
 class SupabaseSink:
@@ -138,25 +145,37 @@ class SupabaseSink:
 
     # ------------------------------------------------------------------ suppressions
     def fetch_suppressions(self) -> list[dict]:
-        return self._get_all("/suppressions", {"select": "email,domain,reason,expires_at"})
+        return self._get_all("/suppressions", {"select": "id,email,domain,reason,expires_at"})
 
     def upsert_suppressions(self, rows: list[dict]) -> int:
-        """Insert rows that are not there yet. Unique indexes are on lower(email) / lower(domain),
-        which PostgREST's on_conflict cannot name, so we look first and insert the rest."""
+        """Insert rows that are not there yet, and upgrade weaker ones. Returns rows written.
+
+        Unique indexes are on lower(email) / lower(domain), which PostgREST's on_conflict cannot
+        name, so we look first. An existing row for the key is patched when the new reason is
+        permanent and the old one expires, or when the old one has expired (suppression_update).
+        """
         existing = self.fetch_suppressions()
-        have_email = {(r.get("email") or "").lower() for r in existing if r.get("email")}
-        have_domain = {
-            (r.get("domain") or "").lower() for r in existing if r.get("domain") and not r.get("email")
+        by_email = {(r.get("email") or "").lower(): r for r in existing if r.get("email")}
+        by_domain = {
+            (r.get("domain") or "").lower(): r for r in existing if r.get("domain") and not r.get("email")
         }
-        new = []
+        now = datetime.now(UTC)
+        new, patched = [], 0
         for row in rows:
             email = (row.get("email") or "").lower() or None
             domain = (row.get("domain") or "").lower() or None
-            if (email and email in have_email) or (not email and domain in have_domain):
+            found = by_email.get(email) if email else by_domain.get(domain)
+            if found is None:
+                new.append({**row, "email": email, "domain": domain})
                 continue
-            new.append({**row, "email": email, "domain": domain})
+            changes = suppression_update(found, row.get("reason") or "manual", _expiry(row), now)
+            if changes:
+                self._patch(
+                    "/suppressions", {"id": f"eq.{found['id']}"}, {**changes, "source": row.get("source")}
+                )
+                patched += 1
         self._insert("/suppressions", new, returning=False)
-        return len(new)
+        return len(new) + patched
 
     # ------------------------------------------------------------------ contacts
     def fetch_contacts_by_email(self, emails: list[str]) -> dict[str, dict]:
@@ -194,6 +213,11 @@ class SupabaseSink:
 
     # ------------------------------------------------------------------ email drafts
     def fetch_email_drafts(self, smartlead_lead_ids: list[int]) -> list[dict]:
+        """Sequence-step sends for these Smartlead leads.
+
+        Reply drafts are also direction 'outbound' and carry smartlead_lead_id, but have no
+        sequence_step; they are left out because callers key rows by (lead id, step).
+        """
         out: list[dict] = []
         ids = sorted(set(smartlead_lead_ids))
         cols = (
@@ -203,7 +227,12 @@ class SupabaseSink:
         for i in range(0, len(ids), IN_CHUNK):
             out += self._get(
                 "/email_drafts",
-                {"select": cols, "smartlead_lead_id": _in(ids[i : i + IN_CHUNK]), "direction": "eq.outbound"},
+                {
+                    "select": cols,
+                    "smartlead_lead_id": _in(ids[i : i + IN_CHUNK]),
+                    "direction": "eq.outbound",
+                    "sequence_step": "not.is.null",
+                },
             )
         return out
 

@@ -132,6 +132,9 @@ class FakeSmartlead:
     def pause_lead(self, campaign_id, lead_id):
         self.calls.append(("pause", campaign_id, lead_id))
 
+    def resume_lead(self, campaign_id, lead_id, delay_days=None):
+        self.calls.append(("resume", campaign_id, lead_id, delay_days))
+
     def unsubscribe_lead(self, campaign_id, lead_id):
         self.calls.append(("unsubscribe", campaign_id, lead_id))
 

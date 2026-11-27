@@ -29,7 +29,7 @@ from ..domains import normalize_domain, registrable
 from ..models import Lead
 from ..store import LeadStore
 from .gate import Contact, Suppressions, sendable_contacts
-from .models import Variant
+from .models import PERMANENT_SUPPRESSION_REASONS, Variant
 from .personalize import build_custom_fields, get_opener
 from .sequences import (
     CAMPAIGN_KEYS,
@@ -61,7 +61,7 @@ SUPPRESSION_REASONS = (
     "manual",
 )
 # reasons that also go on Smartlead's account-wide block list (not_interested expires, so it does not)
-PERMANENT_REASONS = {"unsubscribe", "bounce", "complaint", "customer", "competitor", "manual"}
+PERMANENT_REASONS = PERMANENT_SUPPRESSION_REASONS
 NOT_INTERESTED_DAYS = 180
 PLACEHOLDER_ADDRESS = "TO BE CONFIRMED"
 PENDING_KEY = "outreach_portal_pending"
@@ -744,9 +744,11 @@ def pull_stats(
     counts = {"rows": len(stats), "updated": 0, "inserted": 0, "leads_touched": 0}
     if sink is None or not stats:
         return counts
+    # Reply drafts share smartlead_lead_id but have no sequence_step: they are not sequence sends.
     existing = {
         (int(d["smartlead_lead_id"]), int(d["sequence_step"])): d
         for d in sink.fetch_email_drafts([lid for lid, _ in stats])
+        if d.get("sequence_step") is not None
     }
     contact_ids = {
         e: c["id"] for e, c in sink.fetch_contacts_by_email([v[1] for v in stats.values()]).items()

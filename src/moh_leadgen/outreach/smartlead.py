@@ -315,10 +315,15 @@ class SmartleadClient:
         """POST /campaigns/{id}/leads {lead_list, settings} in batches (the server max is 1,000).
 
         Lead keys: email, first_name, last_name, company_name, phone_number, website, location,
-        linkedin_profile, company_url, custom_fields{}. return_lead_ids=True adds
-        emailToLeadIdMap {newlyAddedLeads, existingLeads, existingLeadsInOtherCampaigns}.
+        linkedin_profile, company_url, custom_fields{}.
 
-        A 200 can still report a problem (lead limit reached: ok=false); that raises.
+        The documented 200 body only has counters (upload_count, already_added_to_campaign,
+        block_count, ..., is_lead_limit_exhausted), no lead ids. return_lead_ids and its
+        emailToLeadIdMap are undocumented, so the map is used when present and any email it
+        does not cover is looked up with GET /leads/?email= (see _resolve_lead_ids). Without
+        that, leads Smartlead is emailing would be recorded as "not added".
+
+        A 200 can still report a problem (ok=false, or the lead limit is exhausted); that raises.
         Returns {"upload_count", "email_to_lead_id", "skipped", "responses"}.
         """
         size = max(1, min(batch_size, MAX_LEADS_PER_CALL))
@@ -327,7 +332,7 @@ class SmartleadClient:
             "ignore_unsubscribe_list": False,
             "ignore_duplicate_leads_in_other_campaign": False,
             "ignore_community_bounce_list": False,
-            "return_lead_ids": True,
+            "return_lead_ids": True,  # undocumented; harmless if ignored
             **(settings_ or {}),
         }
         result: dict[str, Any] = {"upload_count": 0, "email_to_lead_id": {}, "skipped": {}, "responses": []}
@@ -343,9 +348,33 @@ class SmartleadClient:
                     result["email_to_lead_id"][email.lower()] = int(lead_id)
             for email, lead_id in (ids.get("existingLeadsInOtherCampaigns") or {}).items():
                 result["skipped"][email.lower()] = f"in_other_campaign:{lead_id}"
-            if data.get("ok") is False:
+            if data.get("ok") is False or data.get("is_lead_limit_exhausted"):
                 raise SmartleadError(f"add_leads stopped: {data.get('error') or data}")
+            self._resolve_lead_ids(campaign_id, batch, result)
         return result
+
+    def _resolve_lead_ids(self, campaign_id: int, batch: list[dict], result: dict) -> None:
+        """Fill lead ids the add-leads response did not give, one lookup per email.
+
+        An email counts as added only when Smartlead shows it in this campaign; otherwise it is
+        marked skipped, with the reason the lookup shows where it can tell.
+        """
+        for lead in batch:
+            email = str(lead.get("email") or "").lower()
+            if not email or email in result["email_to_lead_id"] or email in result["skipped"]:
+                continue
+            found = self.get_lead_by_email(email) or {}
+            campaigns = {
+                int(c["campaign_id"]) for c in found.get("lead_campaign_data") or [] if c.get("campaign_id")
+            }
+            if found.get("id") and campaign_id in campaigns:
+                result["email_to_lead_id"][email] = int(found["id"])
+            elif found.get("is_unsubscribed"):
+                result["skipped"][email] = "unsubscribed"
+            elif campaigns:
+                result["skipped"][email] = f"in_other_campaign:{min(campaigns)}"
+            else:
+                result["skipped"][email] = "not_added"
 
     def list_leads(self, campaign_id: int, **filters: Any) -> list[dict]:
         """GET /campaigns/{id}/leads paged by offset/limit (max 100). Returns the lead rows."""

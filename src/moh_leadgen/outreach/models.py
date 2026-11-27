@@ -42,6 +42,37 @@ ACTIONABLE_DISPOSITIONS = POSITIVE_DISPOSITIONS | {
 SUPPRESSING_DISPOSITIONS = {Disposition.not_interested, Disposition.unsubscribe, Disposition.bounce}
 
 
+# Suppression reasons that never expire. A not_interested row expires (180 days); these do not.
+PERMANENT_SUPPRESSION_REASONS = frozenset(
+    {"unsubscribe", "bounce", "complaint", "customer", "competitor", "manual"}
+)
+
+
+def _as_datetime(value: Any) -> datetime | None:
+    if value is None or isinstance(value, datetime):
+        return value
+    return datetime.fromisoformat(str(value))
+
+
+def suppression_update(
+    existing: dict[str, Any], reason: str, expires_at: datetime | None, now: datetime
+) -> dict[str, Any] | None:
+    """Fields to PATCH onto an existing suppressions row for the same email/domain, or None.
+
+    There is one row per email (and per domain) because of the unique indexes, so a stronger
+    suppression has to upgrade that row rather than be dropped as a duplicate: an unsubscribe
+    after a not_interested must become permanent, and an expired row must be re-armed.
+    """
+    old_expiry = _as_datetime(existing.get("expires_at"))
+    if old_expiry is None:
+        return None  # already permanent
+    if reason in PERMANENT_SUPPRESSION_REASONS:
+        return {"reason": reason, "expires_at": None}
+    if old_expiry <= now:
+        return {"reason": reason, "expires_at": expires_at.isoformat() if expires_at else None}
+    return None  # still active and the new one is no stronger
+
+
 class Objection(StrEnum):
     none = "none"
     price = "price"

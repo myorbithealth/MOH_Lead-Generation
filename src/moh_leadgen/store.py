@@ -14,6 +14,7 @@ from pathlib import Path
 
 from .enrich.tech import canonical_platform, platform_spellings
 from .models import Candidate, Lead
+from .outreach.models import OutreachState
 
 _SCHEMA = """
 create table if not exists leads (
@@ -63,18 +64,75 @@ def _richness(lead: Lead) -> tuple:
     return (lead.last_enriched_at is not None, len(lead.pages_crawled), lead.score)
 
 
+# How far a lead has moved through the funnel. On a merge the more advanced status wins, so a
+# re-key never turns an enrolled or unsubscribed brand back into "new". The terminal human
+# decisions (disqualified, unsubscribed) rank highest.
+_STATUS_RANK = {
+    "new": 0,
+    "reviewed": 1,
+    "contacted": 2,
+    "enrolled": 3,
+    "replied": 4,
+    "meeting_booked": 5,
+    "promoted": 6,
+    "disqualified": 7,
+    "unsubscribed": 8,
+}
+
+
+def _earliest(a: datetime | None, b: datetime | None) -> datetime | None:
+    present = [dt for dt in (a, b) if dt is not None]
+    return min(present) if present else None
+
+
+def _merge_outreach(base: OutreachState, other: OutreachState) -> OutreachState:
+    """Keep every enrolment and suppression fact from both rows.
+
+    Outreach state is not "evidence" where the richer row should win: losing enrolled_at or
+    suppressed_at would let the next daily run enrol the brand again or email a suppressed one.
+    """
+    merged = base.model_copy(deep=True)
+    for name in OutreachState.model_fields:
+        if _is_empty(getattr(merged, name)) and not _is_empty(getattr(other, name)):
+            setattr(merged, name, getattr(other, name))
+    merged.enrolled_at = _earliest(base.enrolled_at, other.enrolled_at)
+    merged.suppressed_at = _earliest(base.suppressed_at, other.suppressed_at)
+    merged.enrolled_emails = sorted(set(base.enrolled_emails) | set(other.enrolled_emails))
+    merged.smartlead_lead_ids = {**other.smartlead_lead_ids, **base.smartlead_lead_ids}
+    return merged
+
+
+def _merge_source_detail(merged: Lead, other: Lead) -> None:
+    """Fill gaps from the other row, and union the per-email outreach records."""
+    for key, value in other.source_detail.items():
+        merged.source_detail.setdefault(key, value)
+    emails = set(merged.source_detail.get("suppressed_emails", []))
+    emails |= set(other.source_detail.get("suppressed_emails", []))
+    if emails:
+        merged.source_detail["suppressed_emails"] = sorted(emails)
+    skipped = {**other.source_detail.get("smartlead_skipped", {})}
+    skipped.update(merged.source_detail.get("smartlead_skipped", {}))
+    if skipped:
+        merged.source_detail["smartlead_skipped"] = skipped
+
+
 def merge_leads(a: Lead, b: Lead, domain: str) -> Lead:
-    """Combine two rows for the same business: the richer one wins, the other fills its gaps."""
+    """Combine two rows for the same business: the richer one wins, the other fills its gaps.
+
+    Outreach state and status are merged on their own terms (see _merge_outreach): they
+    record what was already sent or suppressed, which must survive whichever row is richer.
+    """
     base, other = (a, b) if _richness(a) >= _richness(b) else (b, a)
     merged = base.model_copy(deep=True)
     merged.domain = domain
     for name in Lead.model_fields:
-        if name in ("domain", "also_found_via", "source_detail"):
+        if name in ("domain", "also_found_via", "source_detail", "outreach", "status"):
             continue
         if _is_empty(getattr(merged, name)) and not _is_empty(getattr(other, name)):
             setattr(merged, name, getattr(other, name))
-    for key, value in other.source_detail.items():
-        merged.source_detail.setdefault(key, value)
+    merged.outreach = _merge_outreach(base.outreach, other.outreach)
+    merged.status = max(a.status, b.status, key=lambda s: _STATUS_RANK.get(s, 0))
+    _merge_source_detail(merged, other)
     for via in [*other.also_found_via, other.discovered_via]:
         if via and via != merged.discovered_via and via not in merged.also_found_via:
             merged.also_found_via.append(via)

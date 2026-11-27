@@ -597,6 +597,20 @@ def test_maybe_later_snoozes_without_task():
     assert portal.tables["tasks"] == []
 
 
+def test_out_of_office_resumes_the_sequence_after_the_snooze():
+    """Plan 6.5: OOO pauses until snooze_until, then resumes; a bare pause would end the sequence."""
+    portal = _portal_for_reply("Out until Dec 3")
+    sl = FakeSmartlead()
+    ooo = Classification.model_validate(
+        _answer(disposition="out_of_office", draft_reply=None, snooze_until="2026-12-03")
+    )
+    ReplyProcessor(portal, classifier=lambda *a: (ooo, "fake"), smartlead=sl, today=date(2026, 11, 27)).run()
+    assert ("category", 77, 555, 4, False) in sl.calls
+    assert ("resume", 77, 555, 6) in sl.calls
+    assert not any(call[0] == "pause" for call in sl.calls)
+    assert portal.tables["contacts"][0]["snooze_until"] == "2026-12-03"
+
+
 def test_extract_reply_old_shape():
     facts = extract_reply(
         {
@@ -613,3 +627,56 @@ def test_extract_reply_old_shape():
         9,
         3,
     )
+
+
+def test_add_suppression_upgrades_expiring_and_expired_rows():
+    """An unsubscribe after a not_interested must become permanent, not be skipped as a dup."""
+    from datetime import UTC, datetime, timedelta
+
+    from moh_leadgen.outreach import portal_io
+
+    future = (datetime.now(UTC) + timedelta(days=100)).isoformat()
+    past = (datetime.now(UTC) - timedelta(days=1)).isoformat()
+    portal = FakePortal(
+        {
+            "suppressions": [
+                {
+                    "id": 1,
+                    "email": "jane@acme.com",
+                    "domain": "acme.com",
+                    "reason": "not_interested",
+                    "expires_at": future,
+                },
+                {"id": 2, "email": None, "domain": "old.com", "reason": "not_interested", "expires_at": past},
+                {
+                    "id": 3,
+                    "email": "perm@acme.com",
+                    "domain": "acme.com",
+                    "reason": "bounce",
+                    "expires_at": None,
+                },
+            ]
+        }
+    )
+    portal_io.add_suppression(
+        portal, email="jane@acme.com", domain="acme.com", reason="unsubscribe", source="reply"
+    )
+    portal_io.add_suppression(
+        portal,
+        email=None,
+        domain="old.com",
+        reason="not_interested",
+        source="reply",
+        expires_at=datetime.now(UTC) + timedelta(days=180),
+    )
+    portal_io.add_suppression(
+        portal, email="perm@acme.com", domain="acme.com", reason="not_interested", source="reply"
+    )
+    portal_io.add_suppression(
+        portal, email="jane@acme.com", domain="acme.com", reason="not_interested", source="x"
+    )
+    rows = {r["id"]: r for r in portal.tables["suppressions"]}
+    assert len(rows) == 3
+    assert rows[1]["reason"] == "unsubscribe" and rows[1]["expires_at"] is None
+    assert rows[2]["expires_at"] > datetime.now(UTC).isoformat()
+    assert rows[3]["reason"] == "bounce" and rows[3]["expires_at"] is None

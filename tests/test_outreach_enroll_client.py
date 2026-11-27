@@ -75,6 +75,8 @@ def test_add_leads_never_sends_more_than_the_server_max():
     sizes = []
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":  # the per-email id lookup
+            return httpx.Response(200, json={})
         sizes.append(len(json.loads(request.content)["lead_list"]))
         return httpx.Response(200, json={"ok": True, "upload_count": sizes[-1]})
 
@@ -85,6 +87,43 @@ def test_add_leads_never_sends_more_than_the_server_max():
 def test_add_leads_raises_when_lead_limit_is_exhausted():
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"ok": False, "is_lead_limit_exhausted": True, "error": "limit"})
+
+    with pytest.raises(SmartleadError):
+        _client(handler).add_leads(1, [{"email": "a@x.com"}])
+
+
+def test_add_leads_looks_up_ids_when_the_response_has_no_map():
+    """The documented add-leads body has counters only; ids come from GET /leads/?email=."""
+    lookups = []
+    known = {
+        "new@x.com": {"id": 501, "lead_campaign_data": [{"campaign_id": 42}]},
+        "other@x.com": {"id": 502, "lead_campaign_data": [{"campaign_id": 7}]},
+        "unsub@x.com": {"id": 503, "is_unsubscribed": True, "lead_campaign_data": []},
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            email = request.url.params["email"]
+            lookups.append(email)
+            return httpx.Response(200, json=known.get(email, {}))
+        return httpx.Response(
+            200, json={"ok": True, "upload_count": 1, "total_leads": 4, "skipped_in_other_campaign_count": 1}
+        )
+
+    emails = ["new@x.com", "other@x.com", "unsub@x.com", "gone@x.com"]
+    out = _client(handler).add_leads(42, [{"email": e} for e in emails])
+    assert lookups == emails
+    assert out["email_to_lead_id"] == {"new@x.com": 501}
+    assert out["skipped"] == {
+        "other@x.com": "in_other_campaign:7",
+        "unsub@x.com": "unsubscribed",
+        "gone@x.com": "not_added",
+    }
+
+
+def test_add_leads_raises_when_limit_exhausted_even_if_ok():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"ok": True, "upload_count": 0, "is_lead_limit_exhausted": True})
 
     with pytest.raises(SmartleadError):
         _client(handler).add_leads(1, [{"email": "a@x.com"}])
@@ -233,6 +272,55 @@ def test_insert_email_drafts_skips_rows_already_present():
     )
     assert n == 1
     assert inserted == [{"smartlead_lead_id": 2, "sequence_step": 1}]
+
+
+def test_fetch_email_drafts_leaves_out_reply_drafts():
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(dict(request.url.params))
+        return httpx.Response(200, json=[])
+
+    _sink(handler).fetch_email_drafts([55])
+    assert seen[0]["sequence_step"] == "not.is.null"
+    assert seen[0]["direction"] == "eq.outbound"
+
+
+def test_upsert_suppressions_upgrades_an_expiring_row_to_permanent():
+    patches, inserted = [], []
+    future = "2099-01-01T00:00:00+00:00"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": 9,
+                        "email": "jane@acme.com",
+                        "domain": None,
+                        "reason": "not_interested",
+                        "expires_at": future,
+                    },
+                    {"id": 10, "email": None, "domain": "perm.com", "reason": "manual", "expires_at": None},
+                ],
+            )
+        if request.method == "PATCH":
+            patches.append((request.url.params["id"], json.loads(request.content)))
+            return httpx.Response(204)
+        inserted.extend(json.loads(request.content))
+        return httpx.Response(201)
+
+    n = _sink(handler).upsert_suppressions(
+        [
+            {"email": "Jane@acme.com", "reason": "unsubscribe", "source": "cli", "expires_at": None},
+            {"domain": "perm.com", "reason": "not_interested", "source": "cli", "expires_at": future},
+            {"domain": "new.com", "reason": "bounce", "source": "cli", "expires_at": None},
+        ]
+    )
+    assert n == 2
+    assert patches == [("eq.9", {"reason": "unsubscribe", "expires_at": None, "source": "cli"})]
+    assert [r["domain"] for r in inserted] == ["new.com"]
 
 
 def test_sink_retries_once_on_5xx():

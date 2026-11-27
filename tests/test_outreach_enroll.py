@@ -429,6 +429,7 @@ class FakeSmartlead:
         self.requests: list[tuple[str, str, dict | None]] = []
         self.stats: dict[int, list[dict]] = {}
         self.next_lead_id = 1000
+        self.return_map = True  # the undocumented emailToLeadIdMap; real Smartlead may omit it
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content) if request.content else None
@@ -455,14 +456,23 @@ class FakeSmartlead:
                 else:
                     self.next_lead_id += 1
                     existing[lead["email"]] = new[lead["email"]] = self.next_lead_id
-            return httpx.Response(
-                200,
-                json={
-                    "ok": True,
-                    "upload_count": len(new),
-                    "emailToLeadIdMap": {"newlyAddedLeads": new, "existingLeads": old},
-                },
-            )
+            body = {"ok": True, "upload_count": len(new), "already_added_to_campaign": len(old)}
+            if self.return_map:
+                body["emailToLeadIdMap"] = {"newlyAddedLeads": new, "existingLeads": old}
+            return httpx.Response(200, json=body)
+        if path == "/leads/" and request.method == "GET":
+            email = request.url.params["email"]
+            for cid, leads in self.leads.items():
+                if email in leads:
+                    return httpx.Response(
+                        200,
+                        json={
+                            "id": leads[email],
+                            "email": email,
+                            "lead_campaign_data": [{"campaign_id": cid}],
+                        },
+                    )
+            return httpx.Response(200, json={})
         if len(parts) == 3 and parts[2] == "statistics":
             rows = self.stats.get(int(parts[1]), [])
             offset = int(request.url.params.get("offset", 0))
@@ -612,6 +622,21 @@ def test_enroll_is_idempotent_and_writes_store_and_portal(store, tmp_path, setti
     assert len(sink.drafts) == 2
 
 
+def test_enroll_records_leads_when_smartlead_returns_no_id_map(store, tmp_path, settings_env):
+    """The documented add-leads response has no lead ids; enrolment must still be recorded."""
+    fake, sink, state_path = _synced(tmp_path, settings_env)
+    fake.return_map = False
+    result = enroll_mod.enroll(
+        store, fake.client(), sink, daily_cap=300, rng=random.Random(1), now=NOW, state_path=state_path
+    )
+    assert len(result.enrolled) == 2 and result.smartlead_skipped == 0
+    lead = store.get("acmehealth.com")
+    assert lead.outreach.enrolled_at == NOW
+    assert lead.outreach.smartlead_lead_ids["jane@acmehealth.com"] > 1000
+    assert "smartlead_skipped" not in lead.source_detail
+    assert len(sink.drafts) == 2
+
+
 def test_daily_cap_counts_sends_across_runs(store, tmp_path, settings_env):
     fake, sink, state_path = _synced(tmp_path, settings_env)
     client = fake.client()
@@ -703,6 +728,33 @@ def test_pull_stats_updates_drafts_and_refreshes_variants(store, tmp_path, setti
     assert store.get("acmehealth.com").outreach.last_outreach_at.isoformat().startswith("2026-12-01")
     # re-running changes nothing
     assert enroll_mod.pull_stats(store, client, sink, state_path=state_path)["updated"] == 0
+
+
+def test_pull_stats_ignores_reply_drafts(store, tmp_path, settings_env):
+    """Reply drafts are direction 'outbound' with a smartlead_lead_id but no sequence_step."""
+    fake, sink, state_path = _synced(tmp_path, settings_env)
+    client = fake.client()
+    enroll_mod.enroll(
+        store, client, sink, daily_cap=300, rng=random.Random(1), now=NOW, state_path=state_path
+    )
+    lead = store.get("acmehealth.com")
+    lead_id = lead.outreach.smartlead_lead_ids["jane@acmehealth.com"]
+    sink.drafts.append(
+        {
+            "id": "reply-draft",
+            "smartlead_lead_id": lead_id,
+            "sequence_step": None,
+            "direction": "outbound",
+            "status": "pending_approval",
+            "to_email": "jane@acmehealth.com",
+        }
+    )
+    fake.stats[lead.outreach.smartlead_campaign_id] = [
+        {"lead_email": "jane@acmehealth.com", "sequence_number": 1, "sent_time": "2026-11-28T14:00:00+00:00"}
+    ]
+    counts = enroll_mod.pull_stats(store, client, sink, state_path=state_path)
+    assert counts["updated"] == 1 and counts["inserted"] == 0
+    assert next(d for d in sink.drafts if d["id"] == "reply-draft")["status"] == "pending_approval"
 
 
 def test_suppress_domain_everywhere(store, tmp_path, settings_env):
