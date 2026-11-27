@@ -31,6 +31,8 @@ jobs:
     env:
       SUPABASE_URL: ${{ vars.SUPABASE_URL || 'https://zrrndxdnopvgspyhrsxh.supabase.co' }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      LEADGEN_PORTAL_PROXY_URL: ${{ secrets.LEADGEN_PORTAL_PROXY_URL }}
+      LEADGEN_PORTAL_TOKEN: ${{ secrets.LEADGEN_PORTAL_TOKEN }}
       SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       SMARTLEAD_API_KEY: ${{ secrets.SMARTLEAD_API_KEY }}
