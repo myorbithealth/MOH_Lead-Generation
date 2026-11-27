@@ -40,7 +40,7 @@ UNSUBSCRIBE_TEXT = "Unsubscribe from these emails"
 FOOTER = (
     "--\n"
     "{{company_name_legal}}, {{postal_address}}\n"
-    'Not the right person, or would rather not hear from us? Reply "stop" and we will not email you again.'
+    'Not relevant for you? Use the unsubscribe link below and I will not write again.'
 )
 
 # vertical -> segment. Keys are vertical prefixes so 'med_spa_aesthetics' matches 'med_spa'.
