@@ -45,6 +45,7 @@ def make_lead(domain: str = "acmehealth.com", **overrides) -> Lead:
         "source": "competitor_platform",
         "vertical": "weight_loss_glp1",
         "competitor_platform": "Healthie",
+        "tech_stack": ["Healthie", "Shopify"],
         "score": 70,
         "last_enriched_at": datetime(2026, 11, 1, tzinfo=UTC),
         "pages_crawled": [f"https://{domain}/", f"https://{domain}/glp-1-program"],
@@ -898,3 +899,17 @@ def test_opener_rejects_platform_claims():
     assert not _valid_opener(bad)
     assert not _valid_opener(good.replace("a markup at the pharmacy", "a platform cut on every order"))
     assert not _valid_opener(good.replace("dispensing the orders", "running a checkout that runs on Telegra"))
+
+
+def test_lead_platform_requires_the_crawl_to_confirm_the_guess():
+    from moh_leadgen.outreach.sequences import lead_platform, platform_hypothesis
+
+    guessed = Lead(domain="luvohealth.com", competitor_platform="Cuvo", tech_stack=["Webflow", "Vercel"])
+    assert platform_hypothesis(guessed) == "Cuvo" and lead_platform(guessed) is None
+    seeded = Lead(domain="x.com", source_detail={"platform": "Healthie"}, tech_stack=["Healthie", "Next.js"])
+    assert lead_platform(seeded) == "Healthie"
+    confirmed = Lead(
+        domain="y.com", competitor_platform="Telegra MD", tech_stack=["Telegra MD", "WooCommerce"]
+    )
+    assert lead_platform(confirmed) == "Telegra MD"
+    assert lead_platform(Lead(domain="z.com")) is None

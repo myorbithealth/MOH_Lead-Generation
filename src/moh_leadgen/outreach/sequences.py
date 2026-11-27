@@ -25,6 +25,7 @@ import re
 import uuid
 from dataclasses import dataclass, field
 
+from ..enrich.tech import canonical_platform
 from ..models import Lead
 from .models import FDA_LIST_VIA_PREFIX, FDA_SEGMENT, SEGMENTS, Variant
 
@@ -70,9 +71,23 @@ def _starts(vertical: str, prefixes: tuple[str, ...]) -> bool:
     return any(vertical.startswith(p) for p in prefixes)
 
 
+def platform_hypothesis(lead: Lead) -> str | None:
+    """The platform a seed list or similarity search suggested: a guess until the crawl confirms it."""
+    return canonical_platform(lead.competitor_platform or lead.source_detail.get("platform")) or None
+
+
 def lead_platform(lead: Lead) -> str | None:
-    """The competitor platform we fingerprinted, else the one the lead was seeded from."""
-    return lead.competitor_platform or lead.source_detail.get("platform") or None
+    """A competitor platform we may name in copy: only one our own crawl fingerprinted on their site.
+
+    The first live review found the seed guess wrong for 3 of 11 companies (a PublicWWW similarity
+    signature tagged Webflow and custom builds as Cuvo), so an unconfirmed guess stays out of the
+    opener, the subject and the facts; segmentation uses it only as a weak signal.
+    """
+    guess = platform_hypothesis(lead)
+    if not guess:
+        return None
+    confirmed = {canonical_platform(t) for t in lead.tech_stack if t}
+    return guess if guess in confirmed else None
 
 
 def is_fda_list_lead(lead: Lead) -> bool:
@@ -96,7 +111,7 @@ def assign_segment(lead: Lead) -> str:
     if is_fda_list_lead(lead):
         return FDA_SEGMENT
     vertical = (lead.vertical or "").lower()
-    if vertical.startswith("weight_loss") or ("peptide" in vertical and lead_platform(lead)):
+    if vertical.startswith("weight_loss") or ("peptide" in vertical and platform_hypothesis(lead)):
         return "glp1_competitor"
     if _starts(vertical, _TRT_PEPTIDES):
         return "trt_peptides"
