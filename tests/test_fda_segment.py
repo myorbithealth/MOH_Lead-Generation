@@ -271,3 +271,30 @@ def test_review_approve_needs_a_domain(tmp_path, monkeypatch):
 def test_smartlead_sequences_cover_three_steps():
     seqs = smartlead_sequences(CAMPAIGNS["fda_compliance"])
     assert [s["email_body"] for s in seqs] == ["{{step1_body}}", "{{step2_body}}", "{{step3_body}}"]
+
+
+def test_learn_never_proposes_for_the_fda_segment(monkeypatch):
+    from moh_leadgen.outreach import metrics as m
+    from moh_leadgen.outreach.models import FDA_SEGMENT, Variant
+
+    seen = []
+    monkeypatch.setattr(m, "build_learn_prompt", lambda segment, *a, **k: seen.append(segment) or "p")
+    monkeypatch.setattr(m, "ask_for_variants", lambda client, prompt: [])
+    monkeypatch.setattr(m, "apply_decisions", lambda portal, variants, decisions: 0)
+    variants = [
+        Variant(id="a", segment=FDA_SEGMENT, sequence_step=1, name="control", status="control", sends=10),
+        Variant(id="b", segment="other", sequence_step=1, name="control", status="control", sends=10),
+    ]
+
+    class Portal:
+        def rpc(self, *a, **k):
+            return None
+
+        def select_all(self, table, *a, **k):
+            return [v.model_dump() for v in variants] if table == "variants" else []
+
+        def select(self, *a, **k):
+            return []
+
+    m.learn(Portal(), client=object(), propose=1, dry_run=True)
+    assert FDA_SEGMENT not in seen and "other" in seen

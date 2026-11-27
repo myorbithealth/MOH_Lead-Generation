@@ -23,7 +23,7 @@ from typing import Any
 
 from ..config import settings
 from . import portal_io, sequences
-from .models import Variant
+from .models import FDA_SEGMENT, Variant
 
 log = logging.getLogger(__name__)
 
@@ -354,6 +354,8 @@ def learn(
         else:
             summaries, objections = _reply_context(portal)
             for (segment, step), arms in sorted(slots(variants).items()):
+                if segment == FDA_SEGMENT:
+                    continue  # reviewed, compliance-only copy: never machine-proposed
                 if step != 1:
                     continue
                 probs = p_best(arms, rng=rng) if len(arms) > 1 else {arms[0].id: 1.0}
