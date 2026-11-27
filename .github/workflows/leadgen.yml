@@ -1,21 +1,31 @@
 name: Lead generation
 
-# Runs every Monday 06:00 UTC and on demand. Discovers + enriches + scores, uploads a CSV,
-# and pushes to the Sales Portal when SUPABASE_SERVICE_ROLE_KEY is configured as a repo secret.
+# Runs every day at 06:00 UTC and on demand. `leadgen daily` discovers, enriches, scores, syncs
+# to the Sales Portal, enrols into Smartlead, classifies replies and pulls stats. Each step is
+# skipped when its keys are missing, so the same workflow works before outreach is switched on.
 on:
   schedule:
-    - cron: "0 6 * * 1"
+    - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:
       tool:
-        description: "legitscript | competitor | local | all"
+        description: "Discovery tool: legitscript | competitor | local | all (all = leadgen daily)"
         default: "all"
       discover_limit:
         description: "New candidates per tool"
-        default: "150"
+        default: "100"
       enrich_limit:
-        description: "Leads to enrich per tool"
-        default: "80"
+        description: "Leads to enrich"
+        default: "200"
+      daily_cap:
+        description: "Smartlead sends enrolment may commit to today (empty = portal/env default)"
+        default: ""
+      enroll:
+        description: "Enrol into Smartlead (true/false)"
+        default: "true"
+      classify:
+        description: "Classify replies (true/false)"
+        default: "true"
 
 permissions:
   contents: read
@@ -39,7 +49,16 @@ jobs:
       GOOGLE_PLACES_API_KEY: ${{ secrets.GOOGLE_PLACES_API_KEY }}
       SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
       PUBLICWWW_API_KEY: ${{ secrets.PUBLICWWW_API_KEY }}
+      SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+      SMARTLEAD_API_KEY: ${{ secrets.SMARTLEAD_API_KEY }}
+      SMARTLEAD_WEBHOOK_URL: ${{ secrets.SMARTLEAD_WEBHOOK_URL || vars.SMARTLEAD_WEBHOOK_URL }}
+      SMARTLEAD_WEBHOOK_SECRET: ${{ secrets.SMARTLEAD_WEBHOOK_SECRET }}
+      SMARTLEAD_EMAIL_ACCOUNT_IDS: ${{ vars.SMARTLEAD_EMAIL_ACCOUNT_IDS }}
+      CALCOM_API_KEY: ${{ secrets.CALCOM_API_KEY }}
       LEADGEN_BOOKING_URL: ${{ vars.LEADGEN_BOOKING_URL }}
+      LEADGEN_OUTREACH_POSTAL_ADDRESS: ${{ vars.LEADGEN_OUTREACH_POSTAL_ADDRESS }}
+      LEADGEN_OUTREACH_COMPANY_LEGAL_NAME: ${{ vars.LEADGEN_OUTREACH_COMPANY_LEGAL_NAME }}
+      LEADGEN_OUTREACH_SENDER_NAME: ${{ vars.LEADGEN_OUTREACH_SENDER_NAME }}
       LEADGEN_DB: leads.db
       LEADGEN_MAX_PAGES_PER_SITE: "6"
     steps:
@@ -55,25 +74,31 @@ jobs:
           path: leads.db
           key: leads-db-${{ github.run_id }}
           restore-keys: leads-db-
-      - name: Run tools
+      # `leadgen daily` exits 1 when any step failed; the remaining steps still upload the
+      # evidence, and the job is marked failed at the end so someone looks at it.
+      - name: Run leadgen daily
+        id: daily
+        continue-on-error: true
         shell: bash
         run: |
           TOOL="${{ github.event.inputs.tool || 'all' }}"
-          DL="${{ github.event.inputs.discover_limit || '150' }}"
-          EL="${{ github.event.inputs.enrich_limit || '80' }}"
-          LLM=""; [ -n "$ANTHROPIC_API_KEY" ] && LLM="--llm"
-          for t in legitscript competitor local; do
-            if [ "$TOOL" = "all" ] || [ "$TOOL" = "$t" ]; then
-              leadgen discover "$t" --limit "$DL" || true
-              leadgen enrich "$t" --limit "$EL" --workers 16 $LLM || true
-            fi
-          done
-      - name: Retry failed crawls
-        shell: bash
-        run: |
-          LLM=""; [ -n "$ANTHROPIC_API_KEY" ] && LLM="--llm"
-          leadgen enrich --retry-failed --limit 100 --workers 16 $LLM || true
+          DL="${{ github.event.inputs.discover_limit || '100' }}"
+          EL="${{ github.event.inputs.enrich_limit || '200' }}"
+          if [ "$TOOL" != "all" ]; then
+            LLM=""; [ -n "$ANTHROPIC_API_KEY" ] && LLM="--llm"
+            leadgen discover "$TOOL" --limit "$DL"
+            leadgen enrich "$TOOL" --limit "$EL" --workers 16 $LLM
+            exit 0
+          fi
+          ARGS=(--discover-limit "$DL" --enrich-limit "$EL")
+          CAP="${{ github.event.inputs.daily_cap }}"
+          [ -n "$CAP" ] && ARGS+=(--daily-cap "$CAP")
+          [ "${{ github.event.inputs.enroll || 'true' }}" = "false" ] && ARGS+=(--no-enroll)
+          [ "${{ github.event.inputs.classify || 'true' }}" = "false" ] && ARGS+=(--no-classify)
+          leadgen daily "${ARGS[@]}" 2>&1 | tee daily.log
+          exit "${PIPESTATUS[0]}"
       - name: Report
+        if: always()
         shell: bash
         run: |
           leadgen stats
@@ -83,13 +108,17 @@ jobs:
             echo '```json'
             leadgen stats
             echo '```'
+            if [ -f daily.log ]; then
+              echo "## leadgen daily"
+              echo '```'
+              tail -n 40 daily.log
+              echo '```'
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
           mkdir -p out
           leadgen sync csv --all --out out/leads.csv
-      - name: Sync to Sales Portal
-        if: env.SUPABASE_SERVICE_ROLE_KEY != ''
-        run: leadgen sync portal --min-score 30
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: leads-${{ github.run_number }}
           path: out/leads.csv
@@ -106,3 +135,6 @@ jobs:
           name: leads-db-${{ github.run_number }}
           path: leads.db
           if-no-files-found: warn
+      - name: Fail if a daily step failed
+        if: steps.daily.outcome == 'failure'
+        run: exit 1

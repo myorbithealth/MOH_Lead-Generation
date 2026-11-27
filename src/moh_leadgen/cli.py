@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import typer
@@ -80,6 +82,7 @@ def discover(
         if limit and added >= limit:
             break
     rprint(f"[bold]{added}[/] new candidates stored in {settings.db_path}")
+    return added
 
 
 @app.command()
@@ -117,7 +120,7 @@ def enrich(
         )
     if not leads:
         rprint("nothing to enrich")
-        return
+        return 0
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     def _work(lead: Lead) -> Lead:
@@ -145,6 +148,7 @@ def enrich(
                 f"owner={lead.owner_name or '-'} email={lead.owner_email or lead.primary_email or '-'}"
                 f"{' (' + lead.owner_email_status + ')' if lead.owner_email_status else ''} phone={lead.owner_phone or lead.primary_phone or '-'}"
             )
+    return done
 
 
 def save_enriched(store: LeadStore, lead: Lead) -> Lead:
@@ -170,6 +174,7 @@ def score():
         store.save(score_lead(lead))
         n += 1
     rprint(f"re-scored {n} lead(s)")
+    return n
 
 
 @app.command()
@@ -190,7 +195,7 @@ def sync(
     )
     if not leads:
         rprint("nothing to sync")
-        return
+        return 0
     if target == "portal":
         from .sinks.supabase import SupabaseSink
 
@@ -204,6 +209,7 @@ def sync(
         rprint(f"[green]wrote {n} lead(s) to {out}[/]")
     else:
         raise typer.BadParameter("target must be portal or csv")
+    return n
 
 
 @app.command()
@@ -280,6 +286,191 @@ def promote(domain: str, owner: str | None = typer.Option(None, help="Portal use
 
     result = SupabaseSink().promote(domain, owner)
     console.print_json(json.dumps(result, indent=2))
+
+
+@app.command()
+def ingest(
+    path: Path = typer.Argument(..., exists=True, dir_okay=False, help="CSV or JSON export"),
+    source: str = typer.Option(..., "--source", help="meta_ads | inbound"),
+):
+    """Add Meta Lead Ads exports or inbound form submissions to the store as leads."""
+    from .outreach.ingest import ingest_file
+
+    if source not in ("meta_ads", "inbound"):
+        raise typer.BadParameter("--source must be meta_ads or inbound")
+    stats = ingest_file(path, source, _store())
+    rprint(f"ingest {source}: {stats}")
+    return stats
+
+
+class StepSkipped(Exception):
+    """Raised by a daily step that has nothing to do (missing key, flag off). Not a failure."""
+
+
+def run_steps(steps: list[tuple[str, Callable[[], object]]]) -> list[tuple[str, str, str]]:
+    """Run each step in its own try/except so one failure never stops the rest.
+
+    Returns (step, status, detail) rows where status is ok, skipped or failed.
+    """
+    log = logging.getLogger(__name__)
+    rows: list[tuple[str, str, str]] = []
+    for name, fn in steps:
+        rprint(f"[bold cyan]== {name}[/]")
+        try:
+            detail = fn()
+        except StepSkipped as why:
+            rows.append((name, "skipped", str(why)))
+        except Exception as exc:  # the daily run must reach every step
+            log.exception("daily step %s failed", name)
+            rows.append((name, "failed", f"{type(exc).__name__}: {exc}"[:200]))
+        else:
+            rows.append((name, "ok", "" if detail is None else str(detail)[:200]))
+    return rows
+
+
+def _require(condition: object, reason: str) -> None:
+    if not condition:
+        raise StepSkipped(reason)
+
+
+def _portal_client():
+    """PortalClient for the reply side; a missing Supabase setting means the step is skipped."""
+    from .outreach.portal_io import PortalClient
+
+    try:
+        return PortalClient()
+    except RuntimeError as exc:
+        raise StepSkipped(str(exc)) from exc
+
+
+def _daily_steps(
+    *,
+    discover_limit: int,
+    enrich_limit: int,
+    retry_limit: int,
+    workers: int,
+    min_score: int,
+    daily_cap: int | None,
+    do_enroll: bool,
+    do_classify: bool,
+    today: date,
+) -> list[tuple[str, Callable[[], object]]]:
+    """The ordered list of steps `leadgen daily` runs. Each is a small closure so it can fail alone."""
+    has_portal = bool(settings.supabase_url and settings.supabase_key)
+    llm = bool(settings.anthropic_key)
+
+    def _discover(name: str) -> Callable[[], object]:
+        return lambda: f"{discover(name, limit=discover_limit, seed=None, opt=[])} new"
+
+    def _enrich(retry: bool) -> object:
+        n = enrich(
+            None,
+            limit=retry_limit if retry else enrich_limit,
+            llm=llm,
+            redo=False,
+            providers=True,
+            domain=None,
+            workers=workers,
+            platform=None,
+            retry_failed=retry,
+        )
+        return f"{n} lead(s)"
+
+    def _sync() -> object:
+        _require(has_portal, "SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set")
+        return f"{sync('portal', min_score, None, Path('out/leads.csv'), False)} upserted"
+
+    def _smartlead():
+        from .outreach.smartlead import SmartleadClient
+
+        _require(settings.smartlead_api_key, "SMARTLEAD_API_KEY not set")
+        return SmartleadClient()
+
+    def _sink():
+        from .sinks.supabase import SupabaseSink
+
+        return SupabaseSink() if has_portal else None
+
+    def _enroll() -> object:
+        from .outreach.enroll import enroll as run_enroll
+        from .outreach.personalize import default_client
+
+        _require(do_enroll, "--no-enroll")
+        result = run_enroll(
+            _store(), _smartlead(), _sink(), daily_cap=daily_cap, anthropic_client=default_client()
+        )
+        return result.summary()
+
+    def _classify() -> object:
+        from .outreach.process_replies import process_replies
+
+        _require(do_classify, "--no-classify")
+        _require(settings.anthropic_key, "ANTHROPIC_API_KEY not set")
+        return process_replies(_portal_client(), limit=200)
+
+    def _pull_stats() -> object:
+        from .outreach.enroll import pull_stats
+
+        return pull_stats(_store(), _smartlead(), _sink())
+
+    def _learn() -> object:
+        from .outreach.metrics import learn
+
+        _require(today.weekday() == 0, "Mondays only")
+        _require(settings.anthropic_key, "ANTHROPIC_API_KEY not set")
+        report = learn(_portal_client(), propose=3, dry_run=False)
+        return f"{len(report['proposed'])} proposed, {report['applied']} applied"
+
+    steps: list[tuple[str, Callable[[], object]]] = [(f"discover {t}", _discover(t)) for t in TOOLS]
+    steps += [
+        ("enrich", lambda: _enrich(False)),
+        ("enrich --retry-failed", lambda: _enrich(True)),
+        ("score", lambda: f"{score()} lead(s)"),
+        ("sync portal", _sync),
+        ("outreach enroll", _enroll),
+        ("outreach classify", _classify),
+        ("outreach pull-stats", _pull_stats),
+        ("outreach learn", _learn),
+    ]
+    return steps
+
+
+@app.command()
+def daily(
+    discover_limit: int = typer.Option(100, help="New candidates per discovery tool"),
+    enrich_limit: int = typer.Option(200, help="Leads to enrich (never-tried rows)"),
+    retry_limit: int = typer.Option(100, help="Failed crawls to retry once their back-off expires"),
+    workers: int = typer.Option(16, help="Sites crawled in parallel"),
+    min_score: int = typer.Option(30, help="Minimum score pushed to the portal"),
+    daily_cap: int | None = typer.Option(
+        None, help="Email sends enrolment may commit to today (default LEADGEN_OUTREACH_DAILY_CAP, 300)"
+    ),
+    enroll_: bool = typer.Option(True, "--enroll/--no-enroll", help="Enrol new leads into Smartlead"),
+    classify_: bool = typer.Option(True, "--classify/--no-classify", help="Classify new replies"),
+):
+    """Run the whole day: discover, enrich, score, sync, enrol, classify, pull stats (and learn on Mondays).
+
+    Steps whose keys are missing are skipped. Exit code 1 if any step failed.
+    """
+    steps = _daily_steps(
+        discover_limit=discover_limit,
+        enrich_limit=enrich_limit,
+        retry_limit=retry_limit,
+        workers=workers,
+        min_score=min_score,
+        daily_cap=daily_cap,
+        do_enroll=enroll_,
+        do_classify=classify_,
+        today=datetime.now(UTC).date(),
+    )
+    rows = run_steps(steps)
+    table = Table("step", "status", "detail")
+    colours = {"ok": "green", "skipped": "yellow", "failed": "red"}
+    for name, status, detail in rows:
+        table.add_row(name, f"[{colours[status]}]{status}[/]", detail)
+    console.print(table)
+    if any(status == "failed" for _, status, _ in rows):
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":

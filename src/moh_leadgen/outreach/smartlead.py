@@ -158,9 +158,7 @@ class SmartleadClient:
             return min(waits) if waits else 60.0
         return (2**attempt) + random.uniform(0, 1)
 
-    def request(
-        self, method: str, path: str, *, params: dict | None = None, json: Any = None
-    ) -> Any:
+    def request(self, method: str, path: str, *, params: dict | None = None, json: Any = None) -> Any:
         """One API call with rate limiting and retries. Returns the decoded JSON body."""
         query = {k: v for k, v in (params or {}).items() if v is not None}
         query["api_key"] = self.api_key

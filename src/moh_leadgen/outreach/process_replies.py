@@ -21,6 +21,7 @@ from typing import Any
 
 from bs4 import BeautifulSoup
 
+from ..config import settings
 from . import portal_io, routing
 from .ingest import FREEMAIL
 from .models import (
@@ -452,4 +453,7 @@ def process_replies(
     portal, limit: int = 200, *, classifier: Classifier | None = None, smartlead=None
 ) -> dict:
     """Entry point for `leadgen daily` and `leadgen outreach classify`."""
+    if classifier is None and not settings.anthropic_key:
+        log.warning("ANTHROPIC_API_KEY not set; reply sweep skipped")
+        return {"events": 0, "processed": 0, "failed": 0, "skipped_no_key": 1}
     return ReplyProcessor(portal, classifier=classifier, smartlead=smartlead).run(limit)

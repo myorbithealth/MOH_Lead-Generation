@@ -1,0 +1,56 @@
+name: Outreach replies
+
+# Every 6 hours and on demand: classify new Smartlead replies stored by the Edge Function in the
+# portal's webhook_events, then pull Smartlead stats into email_drafts and variant counters.
+# Classification needs only the portal. pull-stats matches Smartlead rows to leads through the
+# local store, so the latest leads.db is restored read-only (never saved back: the daily workflow
+# owns it). Campaign ids come from app_settings 'outreach'. Each step runs only when its secrets
+# are set.
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Most reply events to classify"
+        default: "500"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: outreach-replies
+  cancel-in-progress: false
+
+jobs:
+  replies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SUPABASE_URL: ${{ vars.SUPABASE_URL || 'https://zrrndxdnopvgspyhrsxh.supabase.co' }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      SMARTLEAD_API_KEY: ${{ secrets.SMARTLEAD_API_KEY }}
+      CALCOM_API_KEY: ${{ secrets.CALCOM_API_KEY }}
+      LEADGEN_BOOKING_URL: ${{ vars.LEADGEN_BOOKING_URL }}
+      LEADGEN_DB: leads.db
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e ".[llm]"
+      - name: Restore lead store (read-only)
+        uses: actions/cache/restore@v4
+        with:
+          path: leads.db
+          key: leads-db-${{ github.run_id }}
+          restore-keys: leads-db-
+      - name: Classify replies
+        if: env.SUPABASE_SERVICE_ROLE_KEY != '' && env.ANTHROPIC_API_KEY != ''
+        run: leadgen outreach classify --limit "${{ github.event.inputs.limit || '500' }}"
+      - name: Pull Smartlead stats
+        if: always() && env.SUPABASE_SERVICE_ROLE_KEY != '' && env.SMARTLEAD_API_KEY != ''
+        run: leadgen outreach pull-stats

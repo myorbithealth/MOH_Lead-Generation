@@ -145,7 +145,9 @@ class SupabaseSink:
         which PostgREST's on_conflict cannot name, so we look first and insert the rest."""
         existing = self.fetch_suppressions()
         have_email = {(r.get("email") or "").lower() for r in existing if r.get("email")}
-        have_domain = {(r.get("domain") or "").lower() for r in existing if r.get("domain") and not r.get("email")}
+        have_domain = {
+            (r.get("domain") or "").lower() for r in existing if r.get("domain") and not r.get("email")
+        }
         new = []
         for row in rows:
             email = (row.get("email") or "").lower() or None
@@ -216,7 +218,8 @@ class SupabaseSink:
         new = [
             r
             for r in rows
-            if not r.get("smartlead_lead_id") or (r["smartlead_lead_id"], r.get("sequence_step")) not in existing
+            if not r.get("smartlead_lead_id")
+            or (r["smartlead_lead_id"], r.get("sequence_step")) not in existing
         ]
         self._insert("/email_drafts", new, returning=False)
         return len(new)
@@ -245,7 +248,14 @@ class SupabaseSink:
         existing = {(v["segment"], int(v["sequence_step"]), v["name"]): v for v in self.fetch_variants()}
         ids: dict[tuple[str, int, str], str] = {}
         new = []
-        copy_fields = ("angle", "subject", "body", "hypothesis", "smartlead_campaign_id", "smartlead_variant_label")
+        copy_fields = (
+            "angle",
+            "subject",
+            "body",
+            "hypothesis",
+            "smartlead_campaign_id",
+            "smartlead_variant_label",
+        )
         for row in rows:
             key = (row["segment"], int(row["sequence_step"]), row["name"])
             found = existing.get(key)

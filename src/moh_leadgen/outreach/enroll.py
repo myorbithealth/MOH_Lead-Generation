@@ -51,7 +51,15 @@ log = logging.getLogger(__name__)
 
 STATE_FILE = "smartlead_campaigns.json"
 CONTROL_FLOOR = 0.10
-SUPPRESSION_REASONS = ("unsubscribe", "bounce", "complaint", "not_interested", "customer", "competitor", "manual")
+SUPPRESSION_REASONS = (
+    "unsubscribe",
+    "bounce",
+    "complaint",
+    "not_interested",
+    "customer",
+    "competitor",
+    "manual",
+)
 # reasons that also go on Smartlead's account-wide block list (not_interested expires, so it does not)
 PERMANENT_REASONS = {"unsubscribe", "bounce", "complaint", "customer", "competitor", "manual"}
 NOT_INTERESTED_DAYS = 180
@@ -89,7 +97,9 @@ def load_config(sink: Any | None) -> OutreachConfig:
         except RuntimeError as exc:
             log.warning("could not read app_settings 'outreach': %s", exc)
     return OutreachConfig(
-        company_name_legal=_real(value.get("company_name")) or settings.outreach_company_legal_name or "MyOrbit Health",
+        company_name_legal=_real(value.get("company_name"))
+        or settings.outreach_company_legal_name
+        or "MyOrbit Health",
         postal_address=_real(value.get("postal_address")) or settings.outreach_postal_address,
         sender_name=settings.outreach_sender_name,
         daily_cap=int(value.get("daily_cap") or settings.outreach_daily_cap),
@@ -102,11 +112,21 @@ def default_state_path() -> Path:
     return Path(settings.db_path).resolve().parent / STATE_FILE
 
 
-def load_state(path: Path | None = None) -> dict:
+def load_state(path: Path | None = None, sink: Any | None = None) -> dict:
+    """Campaign ids from the local state file. When the file is missing (a fresh CI runner only
+    restores leads.db), fall back to the ids sync-campaigns also wrote to app_settings 'outreach'."""
     path = path or default_state_path()
     if path.exists():
         return json.loads(path.read_text())
-    return {"campaigns": {}}
+    state: dict = {"campaigns": {}}
+    if sink is not None:
+        try:
+            ids = (sink.get_app_setting("outreach") or {}).get("campaigns") or {}
+        except RuntimeError as exc:
+            log.warning("could not read campaign ids from app_settings 'outreach': %s", exc)
+            ids = {}
+        state["campaigns"] = {key: {"id": int(cid)} for key, cid in ids.items() if cid}
+    return state
 
 
 def save_state(state: dict, path: Path | None = None) -> None:
@@ -176,7 +196,9 @@ def plan_enrolment(
 
 
 # ------------------------------------------------------------------ variants
-def choose_variant(variants: list[Variant], rng: random.Random, control_floor: float = CONTROL_FLOOR) -> Variant:
+def choose_variant(
+    variants: list[Variant], rng: random.Random, control_floor: float = CONTROL_FLOOR
+) -> Variant:
     """Pick the arm for one lead.
 
     Until any arm has sends, an equal random split. After that, Thompson sampling: one draw from
@@ -233,7 +255,7 @@ def render_steps(chosen: dict[int, Variant], fields: dict[str, str]) -> dict[str
     for step, variant in sorted(chosen.items()):
         if step == 1:
             out["step1_subject"] = render(variant.subject or "", fields)
-        out[f"step{step}_body"] = as_email_html(with_footer(render(variant.body or "", fields)))
+        out[f"step{step}_body"] = as_email_html(render(with_footer(variant.body or ""), fields))
     return out
 
 
@@ -330,7 +352,7 @@ def enroll(
     rng = rng or random.Random()
     config = load_config(sink)
     cap = config.daily_cap if daily_cap is None else daily_cap
-    state = load_state(state_path)
+    state = load_state(state_path, sink)
     if not dry_run:
         if client is None:
             raise RuntimeError("SMARTLEAD_API_KEY is required to enrol (use --dry-run to preview)")
@@ -354,7 +376,9 @@ def enroll(
             result.skipped_cap += 1
             continue
         if not dry_run and cand.campaign_key not in state["campaigns"]:
-            raise RuntimeError(f"no Smartlead campaign for '{cand.campaign_key}': run `leadgen outreach sync-campaigns`")
+            raise RuntimeError(
+                f"no Smartlead campaign for '{cand.campaign_key}': run `leadgen outreach sync-campaigns`"
+            )
         budget -= cost
         steps = variants[cand.campaign_key]
         chosen = {step: choose_variant(steps[step], rng) for step in sorted(steps)}
@@ -384,7 +408,9 @@ def enroll(
                 _note_enrolled(result, item, key, None, {})
             continue
         campaign_id = int(state["campaigns"][key]["id"])
-        response = client.add_leads(campaign_id, [p for item in items for p in item.payloads], batch_size=batch_size)
+        response = client.add_leads(
+            campaign_id, [p for item in items for p in item.payloads], batch_size=batch_size
+        )
         for item in items:
             ids = {
                 p["email"]: response["email_to_lead_id"][p["email"]]
@@ -433,7 +459,9 @@ def _record(
     lead = item.cand.lead
     for p in item.payloads:
         if p["email"] not in ids:
-            lead.source_detail.setdefault("smartlead_skipped", {})[p["email"]] = skipped.get(p["email"], "not_added")
+            lead.source_detail.setdefault("smartlead_skipped", {})[p["email"]] = skipped.get(
+                p["email"], "not_added"
+            )
     if not ids:
         store.save(lead)
         return
@@ -652,7 +680,15 @@ def sync_campaigns(
 
 
 # ------------------------------------------------------------------ pull stats
-_STATUS_RANK = {"queued": 0, "sent": 1, "delivered": 2, "opened": 3, "replied": 5, "bounced": 6, "unsubscribed": 7}
+_STATUS_RANK = {
+    "queued": 0,
+    "sent": 1,
+    "delivered": 2,
+    "opened": 3,
+    "replied": 5,
+    "bounced": 6,
+    "unsubscribed": 7,
+}
 
 
 def _stat_update(row: dict) -> dict:
@@ -691,13 +727,13 @@ def pull_stats(
 ) -> dict[str, int]:
     """Smartlead per-email statistics -> email_drafts rows (status, sent/opened/replied/bounced
     times) -> portal variant counters (outreach_refresh_variants) and leads.last_outreach_at."""
-    state = load_state(state_path)
+    state = load_state(state_path, sink)
     index: dict[str, Lead] = {}
     for lead in store.iter():
         for email in lead.outreach.smartlead_lead_ids:
             index[email.lower()] = lead
     stats: dict[tuple[int, int], tuple[Lead, str, dict, dict]] = {}
-    for key, info in state["campaigns"].items():
+    for info in state["campaigns"].values():
         for row in client.iter_campaign_statistics(int(info["id"])):
             email = str(row.get("lead_email") or "").lower()
             lead = index.get(email)
@@ -712,7 +748,9 @@ def pull_stats(
         (int(d["smartlead_lead_id"]), int(d["sequence_step"])): d
         for d in sink.fetch_email_drafts([lid for lid, _ in stats])
     }
-    contact_ids = {e: c["id"] for e, c in sink.fetch_contacts_by_email([v[1] for v in stats.values()]).items()}
+    contact_ids = {
+        e: c["id"] for e, c in sink.fetch_contacts_by_email([v[1] for v in stats.values()]).items()
+    }
     new_rows = []
     last_sent: dict[str, str] = {}
     for (lead_id, step), (lead, email, row, update) in stats.items():
@@ -781,7 +819,9 @@ def suppress(
         "domain": None if is_email else domain,
         "reason": reason,
         "source": source,
-        "expires_at": (now + timedelta(days=NOT_INTERESTED_DAYS)).isoformat() if reason == "not_interested" else None,
+        "expires_at": (now + timedelta(days=NOT_INTERESTED_DAYS)).isoformat()
+        if reason == "not_interested"
+        else None,
     }
     out: dict[str, Any] = {"value": value, "portal": 0, "leads": 0, "smartlead_unsubscribed": 0}
     if sink is not None:
@@ -829,6 +869,11 @@ def daily(
     """What `leadgen daily` should run for outreach: stats first (so posteriors are fresh), then enrol."""
     stats = pull_stats(store, client, sink)
     result = enroll(
-        store, client, sink, daily_cap=daily_cap, anthropic_client=anthropic_client, allow_generic=allow_generic
+        store,
+        client,
+        sink,
+        daily_cap=daily_cap,
+        anthropic_client=anthropic_client,
+        allow_generic=allow_generic,
     )
     return {"stats": stats, "enroll": result.summary()}

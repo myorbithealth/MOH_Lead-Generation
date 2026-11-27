@@ -100,6 +100,17 @@ sending (Hunter's verifier is wired in).
 * `booking_link` is your booking page (`LEADGEN_BOOKING_URL`) with UTM parameters identifying the
   lead, so a booked meeting can be traced back to the source tool and domain.
 
+## Outbound
+
+`leadgen daily` runs the whole day in one command: discover, enrich (plus due retries), score,
+sync to the portal, enrol into Smartlead, classify replies, pull stats, and on Mondays propose
+new step-1 variants. Steps without their keys are skipped, and one failing step never stops the
+rest. `.github/workflows/leadgen.yml` runs it at 06:00 UTC every day, and
+`.github/workflows/outreach-replies.yml` sweeps replies and stats every 6 hours.
+`leadgen ingest PATH --source meta_ads|inbound` adds form leads. Nothing is emailed until a
+person starts the Smartlead campaigns. Secrets, first-run order and what each reply disposition
+does: [docs/outbound-runbook.md](docs/outbound-runbook.md). Design: [docs/outbound-system-plan.md](docs/outbound-system-plan.md).
+
 ## Layout
 
 ```

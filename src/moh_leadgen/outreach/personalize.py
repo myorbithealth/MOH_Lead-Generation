@@ -182,7 +182,9 @@ def get_opener(lead: Lead, client: Any | None = None, *, use_model: bool = True)
 # ------------------------------------------------------------------ custom fields
 def booking_link_for(lead: Lead, rep: RepLike | None, segment: str, utm_content: str) -> str:
     """The rep's (or the shared) booking page with utm tags so Cal.com bookings attribute back."""
-    base = (rep.booking_link if rep and rep.booking_link else None) or lead.booking_link or settings.booking_url
+    base = (
+        (rep.booking_link if rep and rep.booking_link else None) or lead.booking_link or settings.booking_url
+    )
     if not base:
         return ""
     tags = urlencode({"utm_source": "smartlead", "utm_campaign": segment, "utm_content": utm_content})
@@ -209,7 +211,9 @@ def build_custom_fields(
         "opener": opener,
         "platform": platform or DEFAULT_PLATFORM,
         "vertical_phrase": vertical_phrase(lead),
-        "sender_name": (rep.rep_name if rep else None) or sender_name or settings.outreach_sender_name
+        "sender_name": (rep.rep_name if rep else None)
+        or sender_name
+        or settings.outreach_sender_name
         or "The MyOrbit Health team",
         "booking_link": booking_link_for(lead, rep, segment, utm_content),
         "company_name_legal": company_name_legal or settings.outreach_company_legal_name or "MyOrbit Health",
