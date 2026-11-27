@@ -13,9 +13,10 @@ Copy rules (checked by tests): plain text, step 1 under 150 words and follow-ups
 excluded), B2B framing, no medical outcome claims, no specific prices (the price-beat guarantee is
 the only money talk, and never in 'fda_compliance'), one ask (a 20-minute call via {{booking_link}}), subjects 3-6 lowercase words. The footer is appended to every rendered email.
 
-Unsubscribe: the campaign-level `unsubscribe_text` + `add_unsubscribe_tag` settings alone produced
-no visible link in a live test, so the footer carries Smartlead's %unsubscribe-text% placeholder,
-which it replaces with the unsubscribe text as a link. The footer also says that
+Opt-out: live tests showed Smartlead adds no visible link from `unsubscribe_text` +
+`add_unsubscribe_tag`, and sends `%unsubscribe-text%` literally. The footer therefore offers a
+reply-based opt-out (CAN-SPAM accepts a reply address); the reply classifier maps such replies to
+`unsubscribe`, which suppresses the contact and unsubscribes the lead in Smartlead. The footer also says that
 replying "stop" works, and the reply classifier treats that as an unsubscribe.
 """
 
@@ -42,7 +43,7 @@ UNSUBSCRIBE_TEXT = "Unsubscribe from these emails"
 FOOTER = (
     "--\n"
     "{{company_name_legal}}, {{postal_address}}\n"
-    "Not relevant for you? %unsubscribe-text% and I will not write again."
+    "Not relevant for you? Tell me in a reply and I will not write again."
 )
 
 # vertical -> segment. Keys are vertical prefixes so 'med_spa_aesthetics' matches 'med_spa'.
