@@ -1,5 +1,9 @@
 """Email hygiene: clean scraped addresses and decide whether one is a person, a role box or junk.
 
+import logging
+
+log = logging.getLogger(__name__)
+
 Scraped pages leak addresses in escaped forms (`u003econtact@x.com`, `%20support@x.com`,
 `mailto:info@x.com`), copy addresses from templates (the web developer's gmail on three sites), and
 publish platform or registrar mailboxes. Everything here is pure except `has_mx`, which does one DNS
@@ -414,10 +418,32 @@ def has_mx(domain: str, resolver: Any = None, *, cache: dict[str, bool | None] |
         cache = _MX_CACHE
     if cache is not None and domain in cache:
         return cache[domain]
+    if resolver is None and not _mx_lookups_trustworthy():
+        return None  # this network cannot answer MX queries at all; do not reject anyone on it
     result = _lookup_mx(domain, resolver or _default_resolver())
     if cache is not None:
         cache[domain] = result
     return result
+
+
+_MX_TRUST: dict[str, bool] = {}
+MX_CONTROL_DOMAIN = "gmail.com"
+
+
+def _mx_lookups_trustworthy() -> bool:
+    """One-time sanity check: if the resolver cannot even answer MX for gmail.com, every
+    'no MX' verdict would be a false negative (sandboxes and some CI runners stub DNS), so
+    has_mx() reports unknown instead of False until a network with real DNS runs it."""
+    if "ok" not in _MX_TRUST:
+        verdict = _lookup_mx(MX_CONTROL_DOMAIN, _default_resolver())
+        _MX_TRUST["ok"] = verdict is True
+        if not _MX_TRUST["ok"]:
+            log.warning(
+                "MX lookups are not trustworthy here (control domain %s -> %s); skipping MX checks",
+                MX_CONTROL_DOMAIN,
+                verdict,
+            )
+    return _MX_TRUST["ok"]
 
 
 def _lookup_mx(domain: str, resolver: Any) -> bool | None:

@@ -318,3 +318,19 @@ def test_has_mx_caches(monkeypatch):
     monkeypatch.setattr("moh_leadgen.enrich.email_hygiene._MX_CACHE", {})
     assert has_mx("good.com") is True and has_mx("good.com") is True
     assert resolver.calls == 2
+
+
+def test_has_mx_unknown_when_resolver_cannot_answer_control_domain(monkeypatch):
+    """A sandbox whose DNS answers nothing for gmail.com must not reject real domains."""
+    from moh_leadgen.enrich import email_hygiene as eh
+
+    class _NoAnswerResolver:
+        def resolve(self, name, rdtype, lifetime=None):
+            import dns.resolver
+
+            raise dns.resolver.NoAnswer()
+
+    monkeypatch.setattr(eh, "_default_resolver", lambda: _NoAnswerResolver())
+    monkeypatch.setattr(eh, "_MX_TRUST", {})
+    monkeypatch.setattr(eh, "_MX_CACHE", {})
+    assert eh.has_mx("luvohealth.com") is None
