@@ -13,7 +13,7 @@ Buy the whole sending layer from one vendor and keep everything else we already 
 
 1. Smartlead Pro ($94/mo) sends, warms up, rotates mailboxes, runs the Day 0/3/7/14 timers, detects replies and bounces, and fires webhooks. Mailboxes are bought through Smartlead's own marketplace (SmartSenders), so nothing is set up in a Google or Microsoft admin console.
 2. The Lovable/Supabase Sales Portal stays the system of record for status, contacts, meetings and deals. The repo pipeline stays the system of record for evidence.
-3. We add exactly three things: an `outreach` package in the repo that gates and enrolls leads from the existing daily GitHub Actions run, three thin Supabase Edge Functions (Smartlead webhook with inline Claude classification, Cal.com booking webhook, Meta lead-ads webhook), and one additive database migration.
+3. We add exactly three things: an `outreach` package in the repo that gates and enrolls leads from the existing daily GitHub Actions run, three thin Supabase Edge Functions (Smartlead webhook that classifies the reply with Claude in the same function, Cal.com booking webhook, Meta lead-ads webhook), and one additive database migration.
 4. No Redis. No Bull. No always-on worker at stage 1. Smartlead holds the per-contact send timers, pg_cron holds the in-database timers, Edge Functions hold the webhooks. A persistent worker (Fly.io, $6.70/mo) is the stage-2 upgrade and has concrete triggers.
 
 ### The thing to understand first
@@ -22,19 +22,21 @@ Buy the whole sending layer from one vendor and keep everything else we already 
 
 Contact enrichment is therefore the first bottleneck, before any sending platform matters. The first paid thing we turn on is Hunter, not Smartlead. A Hunter pass over all 1,471 domains runs on day 3. Its coverage number decides how fast we can send. If fewer than 30% of domains return a verified named email, stage 1 fills its 300/day with role mailboxes at a lower cadence and lower expected reply rate, and lead discovery moves up the priority list.
 
+The sendable pool is also short-lived. After the Hunter pass, the 1,471 leads hold an estimated 450 to 650 named contacts (Tier A) and about 1,000 role mailboxes (Tier B). At 300 sends a day across both tiers that is about three weeks of sending (section 6.1). Holding 300/day after that needs about 1,980 new sendable contacts a month, 1,320 of them Tier A. At 30 to 45% Hunter coverage, the Tier A part alone means 2,900 to 4,400 newly enriched domains a month, or a second named contact per company where Hunter finds one, or a higher Tier B share. Mailbox capacity is a ceiling, not a target: the enrollment gate sends what inventory allows. This is why the `--limit` fix and the crt.sh and PublicWWW expansions are in week 1, not later.
+
 ### What it costs and what it returns
 
 | Item | Stage 1: 300 sends/day | Stage 2: 3,000 sends/day |
 |---|---|---|
 | Infrastructure per month | $613 | $1,540 |
-| New leads enrolled per month (4-step sequence, 22 sending days) | 1,650 | 16,500 |
-| Held demos per month, base case | 23 | 229 |
-| Infrastructure cost per held demo, base case | $27 | $7 |
-| Cost per held demo including $150 of founder time | $177 | $157 |
-| Break-even demo-to-close rate against a $16,964 Satellite year-1 contract | 1.0% | 0.9% |
+| Contacts enrolled per month (22 sending days; 80% of sends to Tier A at 4 steps, 20% to Tier B at 2 steps) | 1,980 (1,320 Tier A) | 19,800 (13,200 Tier A) |
+| Held demos per month, base case, blended tiers | 21 | 213 |
+| Infrastructure cost per held demo, base case | $29 | $7 |
+| Cost per held demo including $150 of founder time | $179 | $157 |
+| Break-even demo-to-close rate against a $16,964 Satellite year-1 contract | 1.1% | 0.9% |
 | Benchmark demo-to-close (SMB SaaS) | 25% to 32% | 25% to 32% |
 
-Unit economics are positive in every scenario, including the pessimistic one (2.4% break-even). Money is not the constraint. Sendable contacts, lead supply and demo capacity are.
+Unit economics are positive in every scenario, including the pessimistic one (2.5% break-even at stage 1). Tier A-only figures are a little higher (23 and 229 held demos); section 10.4 shows both. Money is not the constraint. Sendable contacts, lead supply and demo capacity are.
 
 ### Decisions needed from the team
 
@@ -43,7 +45,7 @@ Unit economics are positive in every scenario, including the pessimistic one (2.
 3. Approve the legal name and physical postal address that goes in every email footer.
 4. Confirm the routing rules (section 6.6). They are a proposal.
 5. Confirm that sending to monitored role mailboxes (info@, hello@, support@) is acceptable as a second tier. It is legal under CAN-SPAM. It will have lower reply rates.
-6. Decide on Meta: who owns the Business Manager and Page, and whether a $1,500/mo test budget is approved for weeks 5 to 8.
+6. Decide on Meta: who owns the Business Manager and Page, whether a $1,500/mo test budget is approved for weeks 5 to 8, and whether you will go through Meta App Review and Business Verification, which Meta's Lead Ads guide requires before an app can read leads (section 9.1).
 
 ### What changes from the way things worked before
 
@@ -66,6 +68,8 @@ Unit economics are positive in every scenario, including the pessimistic one (2.
 | People data (Apollo, Lusha, Hunter adapters) | Finds decision makers | Code exists. No keys. `Hunter.verify()` is implemented but never called, so guessed emails never become verified. |
 | GitHub Actions `leadgen.yml` | Weekly run, Mondays 06:00 UTC | Secrets never configured. `|| true` swallows failures. `leads.db` lives only in an Actions cache. |
 | Portal (Lovable, Supabase project zrrndxdnopvgspyhrsxh) | Reps review leads, set status, promote to company + contact + deal | Works. `email_drafts`, `webhook_events`, `meetings` exist and are empty. |
+
+Counts for the local evidence store come from the snapshot taken on 2026-11-27: 2,714 candidate rows, 2,545 of them enriched. The figure of about 2,300 candidates in the original brief predates the last discovery runs. The portal holds the 1,471 rows that score 30 or more.
 
 ### 2.2 What is in the portal today
 
@@ -125,9 +129,9 @@ Unit economics are positive in every scenario, including the pessimistic one (2.
 | Discovery, enrichment, scoring | GitHub Actions (existing `leadgen.yml`, now daily 06:17 UTC plus `workflow_dispatch`) | Evidence: crawl, fingerprints, LegitScript, DNS, people, score; `leads.db` (SQLite) | Fix `discover --limit`, `--workers 16`, WAL, retry state, upload `leads.db` as artifact every run, drop `|| true` |
 | Portal sync | GitHub Actions to Supabase PostgREST | Pipeline-owned columns of `public.leads` | None |
 | Enrollment gate | GitHub Actions, new `leadgen outreach enroll` step after `sync portal` | Reads `leads`, `contacts`, `suppressions`, `mailboxes`; pushes sendable contacts to a Smartlead campaign with custom fields | New `src/moh_leadgen/outreach/` (about 400 lines) |
-| Personalization | GitHub Actions calling Claude Sonnet 5.5 | One opener sentence and a pitch angle per lead, plus rendered step subjects and bodies for the chosen variant | Reuse `enrich/llm.py` structured-output pattern |
+| Personalization | GitHub Actions calling Claude Sonnet 5.5 (realtime at stage 1; Batch API at stage 2 with a submit-today, collect-tomorrow step, because a batch can take up to 24 hours) | One opener sentence and a pitch angle per lead, plus rendered step subjects and bodies for the chosen variant | Reuse `enrich/llm.py` structured-output pattern |
 | Sending, warm-up, rotation, sequence timers, unsubscribe link, bounce and reply detection | Smartlead (vendor) | Mailboxes, campaigns (one per segment), 4-step sequences, lead categories | None; configured via API |
-| Reply ingestion and classification | Supabase Edge Function `smartlead-webhook` (Deno) | Verify shared secret, insert `webhook_events`, call Claude Haiku 5.5, write `reply_classifications`, set Smartlead category, pause lead, `assign_rep()`, insert `tasks` and `email_drafts(status='pending_approval')`, Slack notification | New (about 200 lines TypeScript) plus a 10-minute pg_cron retry |
+| Reply ingestion and classification | Supabase Edge Function `smartlead-webhook` (Deno) | Verify shared secret, insert `webhook_events`, return 200, then in a background task (`EdgeRuntime.waitUntil`) call Claude Haiku 5.5, write `reply_classifications`, set Smartlead category, pause lead, `assign_rep()`, insert `tasks` and `email_drafts(status='pending_approval')`, Slack notification | New (about 200 lines TypeScript) plus a 10-minute pg_cron retry |
 | Booking | Cal.com Teams (vendor) to Edge Function `calcom-webhook` | Round-robin event types per segment; booking events to `meetings` | New (about 80 lines) |
 | Meta lead ads | Meta to Edge Function `meta-leadgen` | Lead-ads webhook to `leads(source='meta_ads')`; audience sync and Conversions API from the daily Action | New (about 120 lines) plus `leadgen ingest` |
 | In-database timers | Supabase pg_cron | Nightly posterior update, snooze release, suppression expiry, stuck-event alert, 10-minute webhook retry | Migration 0003 |
@@ -204,7 +208,7 @@ Cron plus vendor timers plus webhooks. No queue and no always-on worker at stage
 1. GitHub Actions is the batch clock. The existing `leadgen.yml` moves to `cron: "17 6 * * *"` plus `workflow_dispatch`, with `concurrency: { group: leadgen, cancel-in-progress: false }` so two runs cannot double-enroll. Steps in order: `discover` (new-only limit), `enrich --workers 16 --retry-failed`, `score`, `sync portal --min-score 30`, `outreach personalize`, `outreach enroll`, `outreach pull-stats`, `meta sync` (phase 3), and on Mondays `outreach learn`. A daily 45 to 60 minute run uses 1,350 to 1,800 of the roughly 2,000 Linux 2-core minutes that the $12/mo included compute buys. That is tight. We add a payment method with a $20 spending limit and, if the crawl is I/O bound, move it to the 1-core slim runner at $0.002/min. The minute 17 avoids the top-of-hour delays GitHub documents.
 2. Smartlead is the sequence timer. Day 0/3/7/14, stop-on-reply, per-mailbox daily caps, warm-up and rotation are vendor features. The repo never schedules an individual send. This is what removes the need for Celery, BullMQ, Inngest or Temporal at this volume.
 3. pg_cron is the in-database clock. Nightly: refresh the funnel view, then update variant posteriors. Nightly: release snoozed contacts into a re-enrollment queue. Every 10 minutes: retry unprocessed webhook events by calling the Edge Function through pg_net with a dedicated retry secret (not the service-role key). Every 15 minutes: raise one alert row (deduplicated) if events are stuck more than 30 minutes. All jobs are short and well under Supabase's guidance of 8 concurrent jobs of under 10 minutes.
-4. Edge Functions are the only always-on compute. They are event-driven. The Smartlead function does the whole reply path inline. Supabase's limits are 400 s wall-clock and 2 s CPU per worker (isolate), with awaited I/O excluded from CPU time, plus a 150 s request idle timeout. One to two seconds of awaited Claude I/O per request fits. Idempotency lives in the schema: `webhook_events (provider, idempotency_key)` is unique. A failure leaves `processed_at` null and the 10-minute retry picks it up. We return 200 to Smartlead within its 60-second window before doing any slow work where possible, and rely on the retry for the rest.
+4. Edge Functions are the only always-on compute. They are event-driven. The Smartlead function verifies the secret, inserts the `webhook_events` row, returns 200 at once (Smartlead expects a 2xx within 60 seconds), and then runs the whole reply path in the same isolate through `EdgeRuntime.waitUntil`, Supabase's documented way to keep a function alive after the response has been sent. Supabase's limits are 400 s wall-clock and 2 s CPU per worker (isolate), with awaited I/O excluded from CPU time, plus a 150 s request idle timeout. One to two seconds of awaited Claude I/O per reply fits. Idempotency lives in the schema: `webhook_events (provider, idempotency_key)` is unique. If the background task fails or the isolate is retired first, `processed_at` stays null and the 10-minute retry picks it up.
 
 ### 4.3 Why not the alternatives now
 
@@ -240,7 +244,7 @@ Everything above assumes the Lovable Cloud wrapper on project zrrndxdnopvgspyhrs
 
 | Role | Vendor | Why |
 |---|---|---|
-| Sending control plane | Smartlead Pro | The team already knows it. Pro includes API and webhooks (confirmed on the pricing page and help center; Base does not). 90,000 sends/month and 30,000 stored contacts. Add up to 1,000 leads per call with up to 200 custom fields. Per-lead pause, resume, unsubscribe. Lead categories settable via API. 13 webhook events; EMAIL_REPLY carries the reply body. Rate limit 200 requests/min on the account key. |
+| Sending control plane | Smartlead Pro | The team already knows it. Pro includes API and webhooks (confirmed on the pricing page and help center; Base does not). 90,000 sends/month and 30,000 stored contacts. Add up to 1,000 leads per call with up to 200 custom fields. Per-lead pause, resume, unsubscribe. Lead categories settable via API. 13 webhook event types listed on the vendor's events page (count not independently verified); EMAIL_REPLY carries the reply body. Rate limit 200 requests/min on the account key. |
 | Mailboxes and domains | Smartlead SmartSenders, Zapmail pre-warmed Google (stage 1); Zapmail fresh Google plus Mailforge SMTP (stage 2) | Bought through Smartlead so they auto-link and DNS is handled. Pre-warmed boxes skip the 2 to 3 week warm-up so sends start in week 2. Mailforge is the second provider pool at stage 2 so one Google-side reputation event cannot stop all sending. |
 | Fallback sequencer | Instantly Hypergrowth ($107/mo) | Only if Smartlead's SmartSenders API access is refused. Instantly's DFY mailbox order endpoint is fully public. |
 
@@ -248,8 +252,9 @@ Smartlead facts that shape the design:
 
 - The SmartSenders ordering API requires emailing support@smartlead.ai for marketplace access. We ask on day 1. If it is not enabled within 48 hours, the one-time mailbox order is the only UI step in this plan, or we switch to Instantly.
 - Pre-warmed Zapmail mailboxes: $9/mailbox/mo plus $18/domain/yr, .com only, up to 5 mailboxes per domain, cannot have mailboxes added later, expire after about 9 to 10 months, cannot be moved outside Smartlead.
-- Smartlead's own Zapmail guidance says do not exceed about 20 sends/day per Google mailbox and stay under 50/day including warm-up. The "20 to 25/day" figure in earlier drafts is not vendor-prescribed. We plan at 20.
-- EMAIL_REPLY payload field names differ across Smartlead's own docs (`reply_body`, `reply_message.html`, `reply.body`). The Edge Function reads all three and we validate against one live "Send Test" delivery on day 4. Smartlead retries failed webhooks at 1 m, 5 m, 15 m, 1 h, 6 h and disables the webhook after 5 failures (from the vendor's core webhooks page; unverified against a live account).
+- Smartlead's Zapmail guidance says do not exceed about 20 sends/day per Google mailbox and stay under 50/day including warm-up. Zapmail's own guide says start pre-warmed boxes at 20/day and increase gradually. Neither vendor publishes a hard cap. We plan at 20.
+- EMAIL_REPLY payload field names differ across Smartlead's own docs (`reply_body`, `reply_message.html`, `reply.body`). The Edge Function reads all three and we validate against one live "Send Test" delivery on day 4 (test deliveries carry `is_test: true` and are not retried). Smartlead retries failed webhooks at 1 m, 5 m, 15 m, 1 h, 6 h and disables the webhook after 5 failures (from the vendor's core webhooks page; unverified against a live account).
+- The EMAIL_REPLY payload carries the campaign id and the lead's email address but not Smartlead's `lead_id` or the `email_stats_id` that the reply endpoint needs. The Edge Function resolves `lead_id` from `contacts.smartlead_lead_id` (stored at enrollment via `GET /leads/` by email) and `email_stats_id` from `GET /campaigns/{campaign_id}/leads/{lead_id}/message-history`, and stores both on the `email_drafts` row. The approved reply is then posted to `POST /campaigns/{campaign_id}/reply-email-thread` with no further lookup. Endpoint paths are from Smartlead's API index; the exact field names are confirmed against the live account on day 4.
 
 ### 5.2 Domain and inbox math
 
@@ -281,7 +286,7 @@ Pre-warmed mailboxes (stage 1), per mailbox, enforced by the `mailboxes.daily_ca
 
 Fresh mailboxes (stage 2 cohorts): days 1 to 14 warm-up only at Smartlead's warm-up setting (25/day warm-up, no campaigns); days 15 to 18 send 5, 8, 10, 12; days 19 to 28 send 15, 18, 20; from day 29 cap 20; raise to 25 only after 4 clean weeks. Warm-up stays on permanently.
 
-Total sends therefore reach 300/day in week 3 of sending, not week 2. First sends happen in week 2.
+First sends happen in week 2 (sending days 1 to 5). Caps reach 20 per mailbox on sending day 10, the Friday of week 3. 300/day is therefore a week-3 number, not a week-2 number. The rollout in section 11 follows this table day by day.
 
 ### 5.4 Guardrails enforced automatically
 
@@ -303,7 +308,7 @@ Resume rules: a paused mailbox or domain resumes only after 48 hours of stable m
 
 ### 5.5 Compliance checklist (enforced by a linter before every enrollment)
 
-CAN-SPAM has no B2B exception and liability does not transfer to the vendor ($53,088 per violating email). Google and Yahoo require one-click unsubscribe headers and unsubscribes honored within 48 hours; Microsoft hard-rejects unauthenticated bulk mail (550 5.7.515). Gmail stepped up enforcement in November 2025.
+CAN-SPAM has no B2B exception and liability does not transfer to the vendor ($53,088 per violating email). Google and Yahoo require one-click unsubscribe headers and unsubscribes honored within 48 hours; Microsoft hard-rejects unauthenticated bulk mail (550 5.7.515). Gmail stepped up enforcement in November 2025, and domains with no history of 5,000+/day since 1 January 2024 are on an accelerated enforcement timetable, which describes every sending domain in this plan.
 
 | Requirement | How it is met |
 |---|---|
@@ -338,7 +343,18 @@ The week-1 Hunter pass over all 1,471 domains:
 | Domain Search on every domain | 1 credit per domain that returns 1 to 10 emails, 0 if none | <= 1,471 | Named emails for the share of domains Hunter indexes (assumption 30% to 45%; measure on day 3) |
 | Email Finder for the 261 owner names without a hit | 1 credit only when found; result is auto-verified | <= 261 | Promotes guessed emails to verified (+12 score, sendable) |
 | Verifier on on-site and pattern-derived emails | 0.5 credit each | about 500 | Only verified or accept-all at reduced cap are sent |
-| Total | | about 2,200 of Growth's 10,000/month | |
+| Total | | about 2,000 at most (1,471 + 261 + 250) of Growth's 10,000/month | |
+
+Sendable runway from the existing 1,471 leads, at the planned stage-1 mix of 80% of sends to Tier A and 20% to Tier B:
+
+| Pool | Contacts | Sends per contact | Sends available | Sending days at the planned share of 300/day |
+|---|---|---|---|---|
+| Tier A today | 50 | 4 | 200 | under 1 |
+| Tier A after the Hunter pass (estimate, unverified) | 450 to 650 | 4 | 1,800 to 2,600 | 7 to 11 at 240 sends/day |
+| Tier B | about 1,000 | 2 | about 2,000 | about 33 at 60 sends/day |
+| Both tiers together | | | 3,800 to 4,600 | 13 to 15 at 300/day, roughly three weeks |
+
+Sustaining 300/day after that needs about 1,980 new sendable contacts a month: 1,320 Tier A (240 sends/day over 4 steps) and 660 Tier B (60 sends/day over 2 steps). At 30 to 45% Hunter coverage the Tier A part needs 2,900 to 4,400 newly enriched domains a month. Three levers close the gap, in this order: enroll a second named contact at the same company where Hunter's Domain Search returns one (it returns up to 10 addresses per credit); let the Tier B share float up to 40% while discovery catches up; raise the discovery targets in section 8. The enrollment gate enrolls what inventory allows and never pads volume with unverified addresses. The inventory gate in section 7.4 (two weeks of sendable leads before any cap or cohort increase) applies from the first week of sending.
 
 Apollo stays optional. Apollo's pricing page says API access is on Custom plans while its docs list Basic limits. We do not budget it until an in-account API test passes.
 
@@ -435,7 +451,7 @@ Deterministic paths run regardless of the model: Smartlead's LEAD_UNSUBSCRIBED a
 | bounce | (EMAIL_BOUNCE webhook) | `contacts.bounced_at`, suppress email, try the next sendable contact at the company once | None | Minutes |
 | unclear | None | Sonnet re-check; else task to triage owner | Triage owner (Shubh by default) | 4 business hours |
 
-Approved drafts are sent through Smartlead's reply-from-inbox endpoint from the mailbox that sent the sequence, so the thread stays intact. Never from a rep's personal Gmail. No human-facing reply is ever auto-sent.
+Approved drafts are sent through Smartlead's `reply-email-thread` endpoint from the mailbox that sent the sequence, using the `lead_id` and `email_stats_id` stored on the `email_drafts` row at classification time (section 5.1), so the thread stays intact. Never from a rep's personal Gmail. No human-facing reply is ever auto-sent.
 
 ### 6.6 Routing rules (data in `rep_rules`, a proposal to confirm on day 1)
 
@@ -505,7 +521,7 @@ Variants are rendered into Smartlead custom fields at enrollment, so the arm cho
 
 ### 7.4 The weekly routine (Monday, about 30 minutes of human time)
 
-The routine is a checklist run by a Claude Code session against the database and the vendor APIs. Output: a Slack digest, a `weekly_reports` row, and a short list of proposed changes that need Shubh's approval.
+The routine is a checklist run from the repo (`leadgen outreach weekly`) against the database and the vendor APIs, with a human reading the digest. Output: a Slack digest, a `weekly_reports` row, and a short list of proposed changes that need Shubh's approval.
 
 1. Health: unprocessed `webhook_events`, Edge Function error rate, Smartlead disconnects, DNS preflight per domain, Postmaster spam rate, bounce by mailbox, Actions minutes used.
 2. Funnel: trailing 7 and 28 days by segment and tier; flag any metric more than 30% off the base case.
@@ -536,7 +552,7 @@ Target: grow the portal from 1,471 to about 5,000 qualified leads in two months 
 | 6 | LegitScript tool on GitHub runners | Thousands of seal holders (unverified) | $0 | Weeks 2 to 4 | Wayback CDX and Common Crawl are blocked only in the development sandbox |
 | 7 | Google Ads Transparency Center via SerpApi | 200 to 600 advertisers actively buying GLP-1, TRT, peptide, hair and ED traffic | SerpApi Starter $25/mo if the tier exists; Developer $75/mo otherwise (tier list conflicts between vendor pages; confirm) | Weeks 5 to 8 | Also unlocks the repo's 15 LegitScript search dorks. Meta and TikTok ad-library APIs do not return US commercial ads |
 | 8 | Exa Websets or Parallel FindAll semantic discovery | 500 to 1,500 | About $80 to $300 one-off per quarter | Weeks 5 to 8 | "US DTC telehealth companies selling compounded GLP-1, TRT, peptides online"; dedupe against the store |
-| 9 | Google Places for med spa, weight-loss and hormone clinics x 36 cities | 5,000 to 15,000 raw businesses, low intent | Inside the 5,000 free Text Search requests/month | Stage 2 | Store only `place_id` and website URL; names and addresses come from the site crawl (Places policy) |
+| 9 | Google Places for med spa, weight-loss and hormone clinics x 36 cities | 5,000 to 15,000 raw businesses, low intent | Inside the 5,000 free Text Search Pro requests/month ($32 per 1,000 after) | Stage 2 | Store only `place_id` and website URL; names and addresses come from the site crawl (Places policy) |
 | 10 | Platform aliases and DIY-stack ICP | Better segmentation, +scoring | $0 | Week 2 | Karpa/RxAve, Beluga/Beluga Health, SteadyMD/GetLabs, MD/MD Integrations collapse to one name. Sites with a GLP-1 or TRT vertical plus Stripe or Shopify plus ad pixels and no platform get a scoring bonus |
 
 Not buying: BuiltWith ($295 to $995/mo), Wappalyzer Business ($450/mo), Clay Growth ($205+/mo). None filters telehealth platforms. Apollo only after an API test. Yelp and Outscraper are excluded for lead lists on their terms.
@@ -567,8 +583,8 @@ Meta's job is (a) a second lead source into the same enrich, score and route pat
 
 ### 9.1 Setup
 
-- One Meta app with the Marketing API product, a Business Manager system-user token, app in Live mode (webhooks need it). The Limited access tier is automatic and sufficient for one ad account: 300 + 40 x active ads `ads_management` calls per hour.
-- One-time UI steps: accept Custom Audience Terms on the ad account, accept Lead Ads terms on the Page, check Events Manager data-source categories for a Meta-assigned health and wellness label (request B2B software review if present; Core Setup would strip URL parameters).
+- One Meta app with the Marketing API product, a Business Manager system-user token, app in Live mode (webhooks need it). The Limited access tier is automatic and its rate limit of 300 + 40 x active ads `ads_management` calls per hour is enough for one ad account. The access tier and App Review are separate questions; see the third bullet.
+- Four one-time UI steps: switch the app to Live mode, accept Custom Audience Terms on the ad account, accept Lead Ads terms on the Page, check Events Manager data-source categories for a Meta-assigned health and wellness label (request B2B software review if present; Core Setup would strip URL parameters).
 - App Review: Meta's Lead Ads guide states that retrieving lead data requires App Review for `leads_retrieval` and `pages_manage_ads` plus Business Verification, and that leads cannot be retrieved in Development mode except those submitted by app role holders. Other Meta pages suggest a Business-type app with Standard Access can read its own Page's leads in Live mode. Treat App Review and Business Verification as likely required and budget 1 to 2 weeks for them; verify empirically with a role-user token on day 1 of phase 3.
 
 ### 9.2 Audiences
@@ -628,7 +644,7 @@ Excluded: Meta ad spend ($1,500/mo test), human time (modelled below at $150 per
 
 ### 10.2 Volume assumptions
 
-22 sending days per month. 4 steps per lead. 300 sends/day = 6,600 sends = 1,650 new leads per month. 3,000 sends/day = 66,000 sends = 16,500 new leads per month. Stage 2 presupposes about 10x today's lead supply and the med-spa and clinic segments.
+22 sending days per month. 300 sends/day = 6,600 sends a month; 3,000 sends/day = 66,000. If every contact were Tier A (4 steps), that is 1,650 and 16,500 new contacts a month, the Tier A-equivalent volume used in sections 5 and 8. At the planned mix (80% of sends to Tier A at 4 steps, 20% to Tier B at 2 steps) it is 1,980 contacts a month at stage 1 (1,320 Tier A, 660 Tier B) and 19,800 at stage 2. Stage 2 presupposes about 10x today's lead supply and the med-spa and clinic segments.
 
 ### 10.3 Funnel assumptions (per enrolled Tier A lead)
 
@@ -638,9 +654,11 @@ Excluded: Meta ad spend ($1,500/mo test), human time (modelled below at $150 per
 | Base | 8% | 45% | 55% | 70% | 1.39% | Hunter 3-message sequences 6.8%, Woodpecker 3 to 5 follow-ups 8.3%; positive share 40 to 60% (Cleverly); show between SDR-booked 60% and self-booked 93.5% |
 | Optimistic | 15% | 55% | 65% | 80% | 4.29% | Saleshandy under-200-prospect campaigns 15 to 20%; self-booked no-show 6.5% (RevenueHero) |
 
-Label the base case honestly: it sits closer to vendor-platform data than to agency-scale data. The one large agency dataset implies about 2% per 4-step lead, which is our pessimistic case. Tier B (role mailboxes) will pull toward the pessimistic case. Replace these parameters with observed values after the first 500 replies and 30 meetings.
+Label the base case honestly: it sits closer to vendor-platform data than to agency-scale data. The one large agency dataset implies about 2% per 4-step lead, which is our pessimistic case. Tier B (role mailboxes) is modelled at one third of the Tier A reply rate with the same downstream conversion, and pulls the blend toward the pessimistic case; section 10.4 shows Tier A-only and blended outputs. Replace these parameters with observed values after the first 500 replies and 30 meetings.
 
 ### 10.4 Output and cost per meeting
+
+Table 1. Every enrolled contact is Tier A. An upper bound at 1,650 and 16,500 contacts a month.
 
 | Stage | Case | Leads per month | Replies | Positive | Booked | Held | Infra per booked | Infra per held | Per held incl. $150 founder time | Break-even close rate vs $16,964 |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -653,7 +671,18 @@ Label the base case honestly: it sits closer to vendor-platform data than to age
 
 Cross-check on booked meetings per 1,000 emails: the base case gives 5.0, between agency reality (Belkins about 0.16) and vendor top quartile (Saleshandy 20 to 30).
 
-The stage-2 base case implies about 229 held demos per month for three people, roughly 10 per business day. That is a capacity problem before it is a cost problem. Decide on an appointment setter or a fourth closer before passing about 1,000 sends per day.
+Table 2. Planned mix: 80% of sends to Tier A, 20% to Tier B at one third of the Tier A reply rate. 1,980 contacts a month at stage 1 (1,320 Tier A, 660 Tier B), 19,800 at stage 2. These are the figures quoted in section 1.
+
+| Stage | Case | Contacts per month | Replies | Positive | Booked | Held | Infra per booked | Infra per held | Per held incl. $150 founder time | Break-even close rate vs $16,964 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 300/day ($613) | Pessimistic | 1,980 | 31 | 9 | 3.7 | 2.2 | $166 | $276 | $426 | 2.5% |
+| 300/day ($613) | Base | 1,980 | 123 | 55 | 30.5 | 21.3 | $20 | $29 | $179 | 1.1% |
+| 300/day ($613) | Optimistic | 1,980 | 231 | 127 | 82.6 | 66.1 | $7 | $9 | $159 | 0.9% |
+| 3,000/day ($1,540) | Pessimistic | 19,800 | 308 | 92 | 37.0 | 22.2 | $42 | $69 | $219 | 1.3% |
+| 3,000/day ($1,540) | Base | 19,800 | 1,232 | 554 | 304.9 | 213.4 | $5 | $7 | $157 | 0.9% |
+| 3,000/day ($1,540) | Optimistic | 19,800 | 2,310 | 1,271 | 825.9 | 660.7 | $2 | $2 | $152 | 0.9% |
+
+The stage-2 base case implies about 210 to 230 held demos per month for three people, roughly 10 per business day. That is a capacity problem before it is a cost problem. Decide on an appointment setter or a fourth closer before passing about 1,000 sends per day.
 
 ### 10.5 Value per meeting
 
@@ -674,6 +703,8 @@ Churn of 3% to 5% per month is the SMB SaaS benchmark (Optifai, 939 companies). 
 - 70% gross margin and 4% churn are placeholders for MyOrbit's own cohort data.
 - Founder time of $150 per held demo assumes about 1.5 hours including prep and follow-up.
 - Pre-warmed mailboxes at 20/day; the vendor does not publish a cap, only guidance.
+- Claude costs assume, per Sonnet 5.5 opener, about 2,500 uncached input tokens, 1,500 cached input tokens and 600 output tokens at $2 / $10 per million tokens ($0.10 per million for cache reads), which is $0.0112; the Batch API halves it to $0.0056. Each Haiku 5.5 classification assumes about 1,500 input and 50 output tokens at $0.10 / $0.50 per million, about $0.0002. Haiku 5.5 is priced in two tiers and costs $0.50 / $2.50 per million above 100,000 prompt tokens; a reply never approaches that, so the flat figure holds.
+- Tier B is modelled at one third of the Tier A reply rate with the same positive share, booking rate and show rate. All four Tier B parameters are unmeasured.
 - SerpApi tier pricing conflicts between pages.
 - Lovable Cloud billing may differ from Supabase Pro's $25.
 
@@ -746,7 +777,7 @@ Day 10
 
 ### Weeks 5 to 8: Meta in union with email
 
-- Meta app, system user, Live mode, the three UI acceptances, App Review and Business Verification submission if the role-user test fails.
+- Meta app, system user, the four one-time UI steps (Live mode plus three terms acceptances), App Review and Business Verification submission if the role-user test fails.
 - Dedicated outreach-link subdomain with the pixel. Edge Function `meta-leadgen`. Daily audience sync. Instant Form plus the two ad sets. Conversions API events. Portal attribution view.
 
 ### Weeks 7 to 14: ramp toward 3,000/day, gated
@@ -894,6 +925,8 @@ alter table public.email_drafts
   add column if not exists provider             text not null default 'smartlead',
   add column if not exists provider_message_id  text,            -- gmail_message_id stays for legacy rows
   add column if not exists smartlead_campaign_id bigint,
+  add column if not exists smartlead_lead_id    bigint,          -- resolved by email at enrollment; needed by reply-email-thread
+  add column if not exists smartlead_email_stats_id bigint,      -- from message-history at classification time; needed by reply-email-thread
   add column if not exists idempotency_key      text,            -- generated and stored before any vendor call
   add column if not exists opened_at            timestamptz,
   add column if not exists clicked_at           timestamptz,
@@ -1117,7 +1150,7 @@ Repo-side changes that are not SQL: `Lead.to_portal_row()` stays unchanged (neve
 | Lovable Cloud may not expose pg_cron, pg_net, Vault, CLI Edge Function deployment or the service-role key (unverified) | Day-1 check. Fallback: link the project to a direct Supabase Pro organization, or a sibling Supabase project with status synced back through an RPC. Worst case the pg_cron jobs run as Action steps. |
 | Smartlead SmartSenders API access needs support enablement; pre-warmed inventory may be out of stock | Ask on day 1. Fallback: Instantly Hypergrowth ($107/mo) with its public DFY mailbox order endpoint; or accept the mailbox order as the one UI step. |
 | Smartlead's EMAIL_REPLY payload field name is inconsistent across its own docs | Parser reads `reply_body`, `reply_message.html`, `reply_message.text` and `reply.body`; validated on day 4 against a live test delivery. |
-| Sendable contacts are scarce: 50 direct emails today. If Hunter coverage comes in under 30%, stage 1 cannot fill 300/day with named decision makers | Measure on day 3. Tier B role mailboxes at a lower cadence. Discovery expansion moved forward. Apollo only after an API test. |
+| Sendable contacts are scarce: 50 direct emails today, and the Tier A pool from the existing leads is spent by about week 3 (section 6.1). If Hunter coverage comes in under 30%, stage 1 cannot fill 300/day with named decision makers | Measure on day 3. The enrollment gate holds volume to inventory; Tier B share floats up to 40%; a second named contact per company where Hunter finds one. Discovery expansion moved forward. Apollo only after an API test. |
 | Pre-warmed mailboxes are the only cohort ready in week 2; a bad first week burns them | Verified emails only, catch-all addresses at reduced cap, bounce auto-pause at 2%, second cohort ordered in week 3. Pre-warmed boxes expire in 9 to 10 months, so cohorts must be rotated. |
 | GitHub Actions minutes: a daily 45 to 60 minute run uses 1,350 to 1,800 of about 2,000 included minutes; without a payment method runs are blocked when the allowance is exhausted | Payment method with a $20 spending limit; slim 1-core runner for I/O-bound steps; a public repository would make standard-runner minutes free but exposes the code. |
 | A dropped reply classification waits for the retry | 10-minute pg_cron retry via pg_net; alert if anything is stuck 30 minutes; the daily Action sweeps as a last resort. |
@@ -1125,7 +1158,7 @@ Repo-side changes that are not SQL: `Lead.to_portal_row()` stays unchanged (neve
 | Healthcare adjacency: Meta may classify the domain as health and wellness; Gmail enforcement tightened in November 2025 | B2B-only creative, audience names and form questions; dedicated outreach-link subdomain; DMARC aligned; one-click unsubscribe headers; spam rate watched in Postmaster Tools. |
 | Meta App Review and Business Verification may be required to read leads | Budget 1 to 2 weeks in phase 3; test with a role-user token first. |
 | CAN-SPAM liability ($53,088 per email; no B2B exception; vendor does not shift liability) | Footer and unsubscribe linter blocks enrollment; suppression check before every send; unsubscribe honored within minutes; 3-year retention. |
-| Three-person demo capacity: base case 23 held demos per month at stage 1 and 229 at stage 2 | Daily enrollment cap in `app_settings`; Cal.com host weights; decide on an appointment setter before about 1,000 sends/day. |
+| Three-person demo capacity: base case about 21 held demos per month at stage 1 and about 213 at stage 2 (blended tiers) | Daily enrollment cap in `app_settings`; Cal.com host weights; decide on an appointment setter before about 1,000 sends/day. |
 | Classifier errors are compliance errors (a missed unsubscribe keeps sending) | Unsubscribe and bounce handled deterministically from Smartlead events in addition to the model; weekly reconciliation; Sonnet escalation on low confidence; override logging. |
 | Reply bodies may contain patient details | `contains_phi` flag redacts before storage; no PHI in Meta custom_data or audiences; HIPAA business-associate status is not triggered by B2B prospecting (45 CFR 160.103). |
 | One provider pool at scale is a single reputation event away from zero sends | Stage 2 splits Zapmail Google and Mailforge SMTP; cohorts; caps never above 20 on Google until proven. |
@@ -1163,6 +1196,7 @@ Sending and mailboxes
 - Smartlead webhook core page (retry schedule, EMAIL_REPLIED shape): https://api.smartlead.ai/core/webhooks
 - Smartlead test webhook sample payloads: https://helpcenter.smartlead.ai/en/articles/403-how-to-test-a-smartlead-webhook-with-sample-payloads
 - Smartlead lead categories: https://api.smartlead.ai/api-reference/leads/categories
+- Smartlead API index (reply-email-thread, message-history, get lead by email): https://api.smartlead.ai/llms.txt
 - Smartlead bounce auto-pause webhook: https://helpcenter.smartlead.ai/en/articles/210-bounce-autopause-and-webhook
 - SmartSenders pricing: https://helpcenter.smartlead.ai/en/articles/266-smartsenders-pricing
 - SmartSenders FAQ (Zapmail daily guidance, 5 mailboxes per domain, expiry): https://helpcenter.smartlead.ai/en/articles/256-smartsenders-faqs-and-troubleshooting-everything-you-need-to-know
@@ -1186,6 +1220,8 @@ Enrichment and discovery
 - Hunter API docs: https://hunter.io/api-documentation/v2
 - Hunter State of Cold Email: https://hunter.io/the-state-of-cold-email
 - Apollo rate limits and plan ambiguity: https://docs.apollo.io/reference/rate-limits
+- Apollo plan prices (Apollo-authored; $49 Basic is the annual rate): https://www.apollo.io/insights/more-information-on-what-they-are-paying-for-in-apollo-plan-detailsusage-walkthrough
+- Clay pricing (Growth from $205/mo monthly): https://www.clay.com/pricing
 - PublicWWW prices: https://publicwww.com/prices.html
 - SerpApi Google Ads Transparency Center: https://serpapi.com/google-ads-transparency-center-api and https://serpapi.com/pricing
 - Exa pricing: https://exa.ai/pricing
@@ -1198,6 +1234,7 @@ Enrichment and discovery
 - Karpa platform comparison: https://karpahealth.com/compare/best-glp1-peptide-platforms/
 - FDA warning letters coverage: https://www.pharmacytimes.com/view/fda-and-novo-nordisk-warned-of-glp-1-telehealth-compounding-take-down-what-s-next-
 - Google Places policies: https://developers.google.com/maps/documentation/places/web-service/policies
+- Google Maps Platform pricing (Places Text Search Pro: 5,000 free events per month, then $32 per 1,000): https://developers.google.com/maps/billing-and-pricing/pricing
 - Meta Ad Library API limitations: https://developers.facebook.com/docs/graph-api/reference/ads_archive/
 - BuiltWith plans: https://builtwith.com/plans
 - Wappalyzer pricing: https://www.wappalyzer.com/pricing/
@@ -1224,6 +1261,7 @@ Orchestration and platform
 - Supabase pricing: https://supabase.com/pricing
 - Supabase Edge Function limits: https://supabase.com/docs/guides/functions/limits
 - Supabase Edge Function CPU limits: https://supabase.com/docs/guides/troubleshooting/edge-function-cpu-limits
+- Supabase Edge Function background tasks (EdgeRuntime.waitUntil): https://supabase.com/docs/guides/functions/background-tasks
 - Supabase Cron: https://supabase.com/docs/guides/cron
 - Supabase scheduling functions with pg_net and Vault: https://supabase.com/docs/guides/functions/schedule-functions
 - Supabase Queues (stage 2): https://supabase.com/docs/guides/queues/api
