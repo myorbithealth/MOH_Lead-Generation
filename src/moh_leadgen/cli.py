@@ -166,6 +166,72 @@ def save_enriched(store: LeadStore, lead: Lead) -> Lead:
 
 
 @app.command()
+def people(
+    limit: int = typer.Option(200, help="Leads to check with Hunter this run"),
+    source: str | None = typer.Option(
+        None, help="Only leads from this source (competitor_platform, legitscript, ...) or tool name"
+    ),
+    min_score: int = typer.Option(40, help="Only leads at or above this score"),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="List the leads that would be checked; no Hunter calls"
+    ),
+    verify: bool = typer.Option(
+        True, "--verify/--no-verify", help="Verify every candidate email before keeping it (1 credit each)"
+    ),
+    max_credits: int = typer.Option(300, help="Stop before this run spends more Hunter credits"),
+):
+    """Hunter pass over enriched leads without a named person email: Domain Search, pick up to 2
+    decision-makers, verify, save. Leads checked in the last 90 days are skipped."""
+    from .enrich.hunter import CreditBudget, HunterClient
+    from .enrich.people_pass import credits_needed, run_people_pass
+
+    if source in TOOLS:
+        source = TOOLS[source].source
+    store = _store()
+    client = None
+    if not dry_run:
+        if not settings.hunter_key:
+            raise typer.BadParameter("HUNTER_API_KEY is not set")
+        client = HunterClient(budget=CreditBudget(max_credits))
+
+    def _progress(lead: Lead, result) -> None:
+        rprint(
+            f"{lead.domain}: {result.results} result(s), kept {result.kept}, "
+            f"credits {result.credits}  owner={lead.owner_name or '-'} "
+            f"email={lead.owner_email or '-'}"
+            f"{' (' + lead.owner_email_status + ')' if lead.owner_email_status else ''}"
+        )
+
+    try:
+        stats = run_people_pass(
+            store,
+            client,
+            limit=limit,
+            source=source,
+            min_score=min_score,
+            verify=verify,
+            dry_run=dry_run,
+            save=save_enriched,
+            on_lead=_progress,
+        )
+    finally:
+        if client:
+            client.close()
+    if dry_run:
+        worst = sum(credits_needed(lead, verify) for lead in map(store.get, stats.domains) if lead)
+        for domain in stats.domains:
+            rprint(f"would check {domain}")
+        rprint(
+            f"[bold]dry run[/]: {stats.queued} lead(s) would be checked (at most {worst} credit(s)); "
+            f"{stats.eligible} of {stats.scanned} enriched leads lack a person email, "
+            f"{stats.skipped_recent} checked in the last 90 days"
+        )
+        return stats
+    rprint(f"[bold]people[/]: {stats.summary()}")
+    return stats
+
+
+@app.command()
 def score():
     """Re-score every lead with the current weights (no crawling)."""
     store = _store()
@@ -376,6 +442,18 @@ def _daily_steps(
         )
         return f"{n} lead(s)"
 
+    def _people() -> object:
+        _require(settings.hunter_key, "HUNTER_API_KEY not set")
+        stats = people(
+            limit=150,
+            source=None,
+            min_score=40,
+            dry_run=False,
+            verify=True,
+            max_credits=300,
+        )
+        return stats.summary()
+
     def _sync() -> object:
         _require(has_portal, "SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set")
         return f"{sync('portal', min_score, None, Path('out/leads.csv'), False)} upserted"
@@ -425,6 +503,7 @@ def _daily_steps(
     steps += [
         ("enrich", lambda: _enrich(False)),
         ("enrich --retry-failed", lambda: _enrich(True)),
+        ("people", _people),
         ("score", lambda: f"{score()} lead(s)"),
         ("sync portal", _sync),
         ("outreach enroll", _enroll),
@@ -448,7 +527,7 @@ def daily(
     enroll_: bool = typer.Option(True, "--enroll/--no-enroll", help="Enrol new leads into Smartlead"),
     classify_: bool = typer.Option(True, "--classify/--no-classify", help="Classify new replies"),
 ):
-    """Run the whole day: discover, enrich, score, sync, enrol, classify, pull stats (and learn on Mondays).
+    """Run the whole day: discover, enrich, Hunter people pass, score, sync, enrol, classify, pull stats (and learn on Mondays).
 
     Steps whose keys are missing are skipped. Exit code 1 if any step failed.
     """

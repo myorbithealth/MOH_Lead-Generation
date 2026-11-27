@@ -50,6 +50,8 @@ class Person(BaseModel):
     source_url: str | None = None
     confidence: float = 0.5
     is_decision_maker: bool = False
+    verifier_score: int | None = None  # Hunter Email Verifier score (0-100) when verified
+    accept_all: bool = False  # the mail server accepts any mailbox, so "provider" is not a proof
 
 
 class LegitScriptEvidence(BaseModel):

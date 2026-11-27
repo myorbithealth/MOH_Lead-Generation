@@ -47,6 +47,8 @@ class Settings:
 
     # Enrichment providers
     hunter_key: str = field(default_factory=lambda: _env("HUNTER_API_KEY"))
+    # Verify pattern-guessed owner emails with Hunter's Email Verifier during enrich (1 credit each)
+    hunter_verify: bool = field(default_factory=lambda: _env_bool("LEADGEN_HUNTER_VERIFY", True))
     apollo_key: str = field(default_factory=lambda: _env("APOLLO_API_KEY"))
     apollo_phone_webhook: str = field(default_factory=lambda: _env("APOLLO_PHONE_WEBHOOK_URL"))
     lusha_key: str = field(default_factory=lambda: _env("LUSHA_API_KEY"))

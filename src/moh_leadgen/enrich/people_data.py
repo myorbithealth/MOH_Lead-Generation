@@ -6,7 +6,8 @@ profiles live in licensed databases. Three providers are supported, used in this
 * Apollo.io   - people search by company domain + title -> name, title, LinkedIn; enrichment ->
                 verified work email. Phone reveal is asynchronous (needs APOLLO_PHONE_WEBHOOK_URL).
 * Lusha       - person lookup by name + domain -> emails + direct/mobile phones (synchronous).
-* Hunter.io   - email finder (name + domain -> email + confidence) and verifier.
+* Hunter.io   - email finder (name + domain -> email + confidence) and verifier (see hunter.py;
+                the domain-wide people pass is people_pass.py).
 
 Each adapter is a no-op when its key is absent, so the pipeline degrades gracefully.
 """
@@ -21,6 +22,7 @@ import httpx
 from ..config import settings
 from ..models import Person
 from .extract import DECISION_RE
+from .hunter import HunterClient
 
 log = logging.getLogger(__name__)
 
@@ -44,7 +46,6 @@ DECISION_TITLES = [
 
 APOLLO = "https://api.apollo.io/api/v1"
 LUSHA = "https://api.lusha.com/v2/person"
-HUNTER = "https://api.hunter.io/v2"
 
 
 def _split(name: str) -> tuple[str, str]:
@@ -206,46 +207,8 @@ class Lusha:
 
 
 # ----------------------------------------------------------------------------- Hunter
-class Hunter:
-    def __init__(self, key: str | None = None):
-        self.key = key or settings.hunter_key
-        self.client = httpx.Client(base_url=HUNTER, timeout=40)
-
-    def available(self) -> bool:
-        return bool(self.key)
-
-    def find_email(self, person: Person, domain: str) -> Person:
-        first, last = _split(person.name)
-        if not (first and last):
-            return person
-        try:
-            r = self.client.get(
-                "/email-finder",
-                params={"domain": domain, "first_name": first, "last_name": last, "api_key": self.key},
-            )
-        except httpx.HTTPError as exc:
-            log.warning("hunter finder failed for %s: %s", person.name, exc)
-            return person
-        if r.status_code != 200:
-            return person
-        data = r.json().get("data") or {}
-        if data.get("email"):
-            person.email = data["email"].lower()
-            score = data.get("score") or 0
-            person.email_status = "verified" if score >= 90 else "provider"
-            person.confidence = max(person.confidence, score / 100)
-            person.linkedin = person.linkedin or data.get("linkedin_url")
-            person.phone = person.phone or data.get("phone_number")
-        return person
-
-    def verify(self, email: str) -> str | None:
-        try:
-            r = self.client.get("/email-verifier", params={"email": email, "api_key": self.key})
-        except httpx.HTTPError:
-            return None
-        if r.status_code != 200:
-            return None
-        return (r.json().get("data") or {}).get("status")
+# The Hunter client (X-API-KEY auth, rate limit, retries, credit accounting) lives in hunter.py.
+Hunter = HunterClient
 
 
 # ----------------------------------------------------------------------------- orchestration

@@ -1,0 +1,384 @@
+"""Hunter people pass: named decision-maker emails for leads that only have role mailboxes.
+
+Runs over leads already in the local store (no re-crawl). For each enriched lead without a
+person-class email, one Hunter Domain Search (type=personal, limit 10) returns the people Hunter
+indexes for the domain; up to two decision-makers are kept, each verified with the Email Verifier
+first when verification is on. Every lead checked records source_detail["hunter"] and is not
+searched again for RECHECK_DAYS.
+
+The same verifier step runs inside `pipeline.enrich_lead` for pattern-guessed owner emails
+(verify_guessed), so a guess becomes "verified" or is dropped instead of staying unsendable.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+from ..models import Lead, Person
+from ..scoring import score_lead
+from .email_hygiene import classify_local_part, clean_email
+from .hunter import (
+    BudgetExhausted,
+    HunterClient,
+    HunterStop,
+    verification_outcome,
+)
+
+log = logging.getLogger(__name__)
+
+RECHECK_DAYS = 90
+MAX_PEOPLE = 2
+MIN_CONFIDENCE = 60  # Hunter confidence (0-100) for a candidate without a decision-maker title
+SOURCE_URL = "hunter:domain-search"
+
+DM_TITLE_RE = re.compile(
+    r"\b(co-?founder|founder|ceo|owner|president|medical director|director|head of|vp|"
+    r"vice president|partner|manager)\b",
+    re.IGNORECASE,
+)
+
+
+# ----------------------------------------------------------------------------- selection
+def _is_person_email(email: str | None, name: str | None, domain: str, status: str | None) -> bool:
+    """A cleaned, person-class address that is not just a pattern guess."""
+    cleaned = clean_email(email)
+    if not cleaned or status == "guessed":
+        return False
+    return classify_local_part(cleaned, name, domain) == "person"
+
+
+def has_person_email(lead: Lead) -> bool:
+    """True when the owner or a named person already has a person-class email (role, junk and
+    pattern-guessed addresses do not count)."""
+    if _is_person_email(lead.owner_email, lead.owner_name, lead.domain, lead.owner_email_status):
+        return True
+    return any(_is_person_email(p.email, p.name, lead.domain, p.email_status) for p in lead.people)
+
+
+def checked_recently(lead: Lead, now: datetime, days: int = RECHECK_DAYS) -> bool:
+    raw = (lead.source_detail.get("hunter") or {}).get("checked_at")
+    if not raw:
+        return False
+    try:
+        when = datetime.fromisoformat(str(raw))
+    except ValueError:
+        return False
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)
+    return now - when < timedelta(days=days)
+
+
+def select_decision_makers(
+    emails: list[dict[str, Any]], domain: str, *, max_people: int = MAX_PEOPLE
+) -> list[Person]:
+    """Up to `max_people` people from a Domain Search result.
+
+    Titles matching DM_TITLE_RE win (highest confidence first). Only when none match, the
+    highest-confidence people at or above MIN_CONFIDENCE are taken. Nameless rows and role or
+    junk addresses are skipped.
+    """
+    rows: list[tuple[bool, int, str, str, str | None, dict[str, Any]]] = []
+    seen: set[str] = set()
+    for entry in emails:
+        addr = clean_email(entry.get("value"))
+        if not addr or addr in seen or entry.get("type") not in (None, "personal"):
+            continue
+        name = " ".join(str(x).strip() for x in (entry.get("first_name"), entry.get("last_name")) if x)
+        if not name or classify_local_part(addr, name, domain) != "person":
+            continue
+        seen.add(addr)
+        title = entry.get("position") or None
+        confidence = int(entry.get("confidence") or 0)
+        rows.append((bool(title and DM_TITLE_RE.search(title)), confidence, addr, name, title, entry))
+    titled = sorted((r for r in rows if r[0]), key=lambda r: r[1], reverse=True)
+    if titled:
+        picked = titled[:max_people]
+    else:
+        confident = [r for r in rows if r[1] >= MIN_CONFIDENCE]
+        picked = sorted(confident, key=lambda r: r[1], reverse=True)[:max_people]
+    return [
+        Person(
+            name=name,
+            title=title,
+            email=addr,
+            email_status="provider",
+            linkedin=entry.get("linkedin") or None,
+            phone=entry.get("phone_number") or None,
+            source_url=SOURCE_URL,
+            confidence=confidence / 100,
+            is_decision_maker=is_dm,
+        )
+        for is_dm, confidence, addr, name, title, entry in picked
+    ]
+
+
+# ----------------------------------------------------------------------------- verification
+@dataclass
+class VerifyCounts:
+    verified: int = 0
+    dropped: int = 0
+    accept_all: int = 0
+
+
+def _verify_person(person: Person, client: HunterClient, counts: VerifyCounts) -> bool:
+    """Verify person.email in place. True when the address is kept."""
+    result = client.verify_email(person.email or "")
+    status, accept_all = verification_outcome(result)
+    if status is None:
+        counts.dropped += 1
+        return False
+    person.email_status = status
+    person.accept_all = accept_all
+    person.verifier_score = result.score if result else None
+    counts.verified += status == "verified"
+    counts.accept_all += accept_all
+    return True
+
+
+def guessed_emails(lead: Lead) -> list[str]:
+    found = [lead.owner_email] if lead.owner_email and lead.owner_email_status == "guessed" else []
+    found += [p.email for p in lead.people if p.email and p.email_status == "guessed"]
+    return list(dict.fromkeys(e for e in found if e))
+
+
+def verify_guessed(lead: Lead, client: HunterClient, counts: VerifyCounts | None = None) -> VerifyCounts:
+    """Run the verifier on every pattern-guessed address on the lead: promote or drop it."""
+    counts = counts or VerifyCounts()
+    for email in guessed_emails(lead):
+        probe = Person(name=lead.owner_name or email, email=email, email_status="guessed")
+        kept = _verify_person(probe, client, counts)
+        targets = [p for p in lead.people if p.email == email]
+        for person in targets:
+            if kept:
+                person.email_status = probe.email_status
+                person.accept_all, person.verifier_score = probe.accept_all, probe.verifier_score
+            else:
+                person.email, person.email_status = None, None
+        if lead.owner_email == email:
+            if kept:
+                lead.owner_email_status = probe.email_status
+            else:
+                lead.owner_email, lead.owner_email_status = None, None
+    if lead.owner_email_status != "guessed":
+        lead.source_detail.pop("owner_email_guessed", None)
+    return counts
+
+
+def verify_guessed_with_hunter(lead: Lead, client: HunterClient | None = None) -> VerifyCounts | None:
+    """The enrich-time hook: verify guessed addresses when there are any. Never raises."""
+    if not guessed_emails(lead):
+        return None
+    own = client is None
+    client = client or HunterClient()
+    try:
+        counts = verify_guessed(lead, client)
+    except HunterStop as exc:
+        log.warning("hunter verify skipped for %s: %s", lead.domain, exc)
+        return None
+    finally:
+        if own:
+            client.close()
+    lead.source_detail["hunter_verify"] = {
+        "checked_at": datetime.now(UTC).isoformat(),
+        "verified": counts.verified,
+        "dropped": counts.dropped,
+        "accept_all": counts.accept_all,
+    }
+    return counts
+
+
+# ----------------------------------------------------------------------------- one lead
+def _merge_person(lead: Lead, new: Person) -> bool:
+    """Add a Hunter person to lead.people. True when it gave the lead a new email."""
+    for cur in lead.people:
+        if cur.email and cur.email == new.email:
+            if cur.email_status in (None, "guessed"):
+                cur.email_status, cur.verifier_score = new.email_status, new.verifier_score
+                cur.accept_all = new.accept_all
+            cur.title = cur.title or new.title
+            cur.linkedin, cur.phone = cur.linkedin or new.linkedin, cur.phone or new.phone
+            return False
+    for cur in lead.people:
+        if cur.name.strip().lower() == new.name.strip().lower():
+            if cur.email and cur.email_status != "guessed":
+                return False  # keep the address we already trust for this person
+            cur.email, cur.email_status = new.email, new.email_status
+            cur.verifier_score, cur.accept_all = new.verifier_score, new.accept_all
+            cur.title = cur.title or new.title
+            cur.linkedin, cur.phone = cur.linkedin or new.linkedin, cur.phone or new.phone
+            cur.confidence = max(cur.confidence, new.confidence)
+            cur.is_decision_maker = cur.is_decision_maker or new.is_decision_maker
+            return True
+    lead.people.append(new)
+    return True
+
+
+def _fill_owner(lead: Lead, person: Person) -> None:
+    """Owner fields are only filled when empty; a named owner is never replaced."""
+    if not lead.owner_name:
+        lead.owner_name = person.name
+        lead.owner_title = lead.owner_title or person.title
+        lead.owner_linkedin = lead.owner_linkedin or person.linkedin
+        lead.owner_phone = lead.owner_phone or person.phone
+    if lead.owner_name.strip().lower() == person.name.strip().lower() and not lead.owner_email:
+        lead.owner_email, lead.owner_email_status = person.email, person.email_status
+        lead.owner_title = lead.owner_title or person.title
+
+
+@dataclass
+class LeadResult:
+    ok: bool = True
+    results: int = 0
+    kept: int = 0
+    new_emails: int = 0
+    credits: int = 0
+    counts: VerifyCounts = field(default_factory=VerifyCounts)
+
+
+def credits_needed(lead: Lead, verify: bool) -> int:
+    """Worst-case credits for one lead, so the budget never runs out half way through a lead."""
+    return 1 + ((MAX_PEOPLE + len(guessed_emails(lead))) if verify else 0)
+
+
+def process_lead(lead: Lead, client: HunterClient, *, verify: bool, now: datetime) -> LeadResult:
+    """Domain Search + selection + verification for one lead, mutating it in place."""
+    before = client.credits_used
+    found = client.domain_search(lead.domain)
+    if found is None:
+        return LeadResult(ok=False)
+    out = LeadResult(results=len(found.emails))
+    candidates = select_decision_makers(found.emails, lead.domain)
+    if verify:
+        verify_guessed(lead, client, out.counts)
+        candidates = [p for p in candidates if _verify_person(p, client, out.counts)]
+    out.kept = len(candidates)
+    out.new_emails = sum(_merge_person(lead, p) for p in candidates)
+    if candidates:
+        _fill_owner(lead, candidates[0])
+    if found.pattern:
+        lead.email_pattern = found.pattern
+    out.credits = client.credits_used - before
+    lead.source_detail["hunter"] = {
+        "checked_at": now.isoformat(),
+        "results": out.results,
+        "pattern": found.pattern,
+        "credits_used": out.credits,
+        "accept_all": found.accept_all,
+        "kept": [p.email for p in candidates],
+    }
+    if out.new_emails:
+        providers = set(lead.source_detail.get("contact_providers") or [])
+        lead.source_detail["contact_providers"] = sorted(providers | {SOURCE_URL})
+    return out
+
+
+# ----------------------------------------------------------------------------- the pass
+@dataclass
+class PassStats:
+    scanned: int = 0  # enriched leads matching the filters
+    eligible: int = 0  # ... without a person-class email
+    skipped_recent: int = 0  # ... already checked in the last RECHECK_DAYS
+    queued: int = 0
+    checked: int = 0
+    with_new_email: int = 0
+    verified: int = 0
+    dropped: int = 0
+    accept_all: int = 0
+    errors: int = 0
+    credits_used: int = 0
+    stopped: str | None = None
+    domains: list[str] = field(default_factory=list)
+
+    @property
+    def hit_rate(self) -> float:
+        return 100.0 * self.with_new_email / self.checked if self.checked else 0.0
+
+    @property
+    def coverage(self) -> float:
+        """Share of the scanned enriched leads that now have a person-class email."""
+        if not self.scanned:
+            return 0.0
+        return 100.0 * (self.scanned - self.eligible + self.with_new_email) / self.scanned
+
+    def summary(self) -> str:
+        line = (
+            f"{self.checked} lead(s) checked, {self.with_new_email} with a new person email, "
+            f"{self.verified} verified, {self.dropped} dropped, {self.accept_all} accept-all, "
+            f"{self.credits_used} credit(s) used; estimated coverage {self.hit_rate:.0f}% of checked "
+            f"leads, {self.coverage:.0f}% of {self.scanned} enriched leads have a person email"
+        )
+        if self.skipped_recent:
+            line += f"; {self.skipped_recent} checked in the last {RECHECK_DAYS} days skipped"
+        if self.errors:
+            line += f"; {self.errors} error(s)"
+        if self.stopped:
+            line += f"; stopped: {self.stopped}"
+        return line
+
+
+def select_leads(leads: list[Lead], *, limit: int, now: datetime, stats: PassStats) -> list[Lead]:
+    stats.scanned = len(leads)
+    eligible = [lead for lead in leads if not has_person_email(lead)]
+    stats.eligible = len(eligible)
+    due = [lead for lead in eligible if not checked_recently(lead, now)]
+    stats.skipped_recent = len(eligible) - len(due)
+    oldest = datetime.min.replace(tzinfo=UTC)
+    due.sort(key=lambda lead: (lead.score, lead.last_enriched_at or oldest), reverse=True)
+    return due[:limit] if limit else due
+
+
+def run_people_pass(
+    store: Any,
+    client: HunterClient | None,
+    *,
+    limit: int = 200,
+    source: str | None = None,
+    min_score: int | None = 40,
+    verify: bool = True,
+    dry_run: bool = False,
+    save: Callable[[Any, Lead], Lead] | None = None,
+    now: datetime | None = None,
+    on_lead: Callable[[Lead, LeadResult], None] | None = None,
+) -> PassStats:
+    """Check up to `limit` leads with Hunter; `save` persists each changed lead (cli.save_enriched)."""
+    now = now or datetime.now(UTC)
+    stats = PassStats()
+    leads = list(store.iter(source=source, enriched=True, min_score=min_score))
+    queue = select_leads(leads, limit=limit, now=now, stats=stats)
+    stats.queued = len(queue)
+    if dry_run or client is None:
+        stats.domains = [lead.domain for lead in queue]
+        return stats
+    persist = save or (lambda st, lead: st.save(lead) or lead)
+    start = client.credits_used
+    for lead in queue:
+        if not client.budget.can_spend(credits_needed(lead, verify)):
+            stats.stopped = f"credit budget of {client.budget.max_credits} reached"
+            break
+        try:
+            result = process_lead(lead, client, verify=verify, now=now)
+        except BudgetExhausted as exc:
+            stats.stopped = str(exc)
+            break
+        except HunterStop as exc:
+            stats.stopped = str(exc)
+            break
+        if not result.ok:
+            stats.errors += 1
+            continue
+        stats.checked += 1
+        stats.with_new_email += result.new_emails > 0 and has_person_email(lead)
+        stats.verified += result.counts.verified
+        stats.dropped += result.counts.dropped
+        stats.accept_all += result.counts.accept_all
+        stats.domains.append(lead.domain)
+        saved = persist(store, score_lead(lead))
+        if on_lead:
+            on_lead(saved, result)
+    stats.credits_used = client.credits_used - start
+    return stats

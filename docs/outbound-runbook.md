@@ -62,8 +62,20 @@ named contact costs 4 sends, a role mailbox 2.
 
 | Workflow | When | What |
 | --- | --- | --- |
-| `leadgen.yml` | daily 06:00 UTC, and on dispatch | `leadgen daily`: discover, enrich, retry failed crawls, score, sync portal, enroll, classify, pull-stats; on Mondays also `outreach learn --propose 3` |
+| `leadgen.yml` | daily 06:00 UTC, and on dispatch | `leadgen daily`: discover, enrich, retry failed crawls, Hunter people pass, score, sync portal, enroll, classify, pull-stats; on Mondays also `outreach learn --propose 3` |
 | `outreach-replies.yml` | every 6 hours, and on dispatch | `leadgen outreach classify --limit 500`, then `leadgen outreach pull-stats` |
+
+The `people` step (`leadgen people --limit 150`, skipped without `HUNTER_API_KEY`) runs Hunter's
+Domain Search on enriched leads (score 40 and up) that have no named person email yet, keeps up to
+two decision-makers per domain and verifies each address before keeping it: `valid` becomes
+`verified`, `accept_all` stays `provider` with the `accept_all` flag, anything else is dropped.
+Each lead it checks records `source_detail.hunter` and is not searched again for 90 days. A run
+stops cleanly at `--max-credits` (default 300; a search or a verification costs 1 credit each) and
+prints leads checked, new person emails, verified, dropped, credits used and estimated coverage.
+For the one-off pass over the existing leads, start with `leadgen people --dry-run --limit 1500`,
+then run in chunks such as `leadgen people --limit 500 --max-credits 1500`. During `enrich`,
+pattern-guessed owner emails are verified the same way when `HUNTER_API_KEY` is set
+(`LEADGEN_HUNTER_VERIFY=false` turns that off).
 
 Each step of `leadgen daily` is skipped when its keys are missing and isolated from the others.
 The run ends with a table of ok / skipped / failed steps (also in the job summary) and exits 1 if

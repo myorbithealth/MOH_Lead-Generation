@@ -2,7 +2,7 @@
 
 Every tool runs the same chain so leads from different sources are comparable:
 crawl -> extract contacts/people -> LegitScript evidence -> platform fingerprint
--> DNS/RDAP -> optional Hunter + Claude -> score -> booking link.
+-> DNS/RDAP -> optional Hunter (finder + verifier for guessed emails) + Claude -> score -> booking link.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 
 from .config import settings
 from .domains import is_junk, normalize_domain
-from .enrich import dns_info, extract, llm, people_data, rdap
+from .enrich import dns_info, extract, llm, people_data, people_pass, rdap
 from .enrich.legitscript import detect_legitscript, infer_vertical
 from .enrich.site_crawler import SiteSnapshot, crawl_site
 from .enrich.tech import canonical_platform, fingerprint
@@ -212,6 +212,9 @@ def enrich_lead(
                 if guess:
                     lead.owner_email, lead.owner_email_status = guess, "guessed"
                     best.email, best.email_status = guess, "guessed"
+        # 3. A pattern guess is not sendable: Hunter's verifier promotes it to verified or drops it.
+        if use_providers and settings.hunter_key and settings.hunter_verify:
+            people_pass.verify_guessed_with_hunter(lead)
         if lead.owner_email_status == "guessed":
             lead.source_detail["owner_email_guessed"] = True
 
