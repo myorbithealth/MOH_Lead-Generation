@@ -112,7 +112,7 @@ def test_fda_copy_follows_the_house_rules():
         assert "20 minutes" in text or "Twenty minutes" in text
         assert "{{" not in text and "$" not in text and "!" not in text and "—" not in text
         assert not _AI_TELLS.search(text), v.name
-        assert text.rstrip().endswith(SAMPLE_FIELDS["sender_name"])
+        assert SAMPLE_FIELDS["sender_name"] not in text  # the mailbox signs via %signature%
         if step.step == 1:
             assert subject_problems(v.subject) == []
             assert v.body.startswith("Hi {{first_name}},\n\n{{opener}}\n\n")
@@ -270,7 +270,11 @@ def test_review_approve_needs_a_domain(tmp_path, monkeypatch):
 
 def test_smartlead_sequences_cover_three_steps():
     seqs = smartlead_sequences(CAMPAIGNS["fda_compliance"])
-    assert [s["email_body"] for s in seqs] == ["{{step1_body}}", "{{step2_body}}", "{{step3_body}}"]
+    assert [s["email_body"].split("<br>")[0] for s in seqs] == [
+        "{{step1_body}}",
+        "{{step2_body}}",
+        "{{step3_body}}",
+    ]
 
 
 def test_learn_never_proposes_for_the_fda_segment(monkeypatch):

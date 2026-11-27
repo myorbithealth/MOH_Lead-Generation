@@ -10,6 +10,7 @@ deterministic template sentence is used instead, so enrolment never blocks on th
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import logging
 import re
@@ -86,7 +87,7 @@ def last_name_from(full_name: str | None) -> str | None:
 # ------------------------------------------------------------------ opener
 def opener_facts(lead: Lead, angle: str | None = None) -> dict[str, str]:
     """Everything the opener may draw on. Same facts -> same cache key -> no new call."""
-    facts: dict[str, str] = {"company": lead.company_name or lead.domain, "domain": lead.domain}
+    facts: dict[str, str] = {"company": display_company_name(lead), "domain": lead.domain}
     platform = lead_platform(lead)
     if platform:
         facts["platform"] = platform
@@ -164,8 +165,19 @@ _COMPLIANCE_BANNED = re.compile(
 )
 
 
+# Claims about the prospect's stack that the first review round found false in 5 of 11 openers:
+# the detected platform is a fingerprint guess, so nothing may "run on" it or "take a cut".
+_PLATFORM_CLAIMS = re.compile(
+    r"\b(runs? on|built on|hosted on|behind the storefront|platform(?:'s)? cut|takes a cut|"
+    r"someone else holds|checkout that runs|a cut of (each|every) order)\b",
+    re.IGNORECASE,
+)
+
+
 def _valid_opener(text: str, angle: str | None = None) -> bool:
     if angle == COMPLIANCE_ANGLE and _COMPLIANCE_BANNED.search(text):
+        return False
+    if _PLATFORM_CLAIMS.search(text):
         return False
     words = len(text.split())
     if not (20 <= words <= OPENER_MAX_WORDS) or "\n" in text:
@@ -178,8 +190,9 @@ def _valid_opener(text: str, angle: str | None = None) -> bool:
 _ANGLE_HINTS = {
     "price_beat_guarantee": "build toward the money: what they pay today per consult and per order, and "
     "that one physician fee covers a patient's consults for every medication",
-    "ownership_no_markup": "build toward ownership: who holds their payment processor, their patient "
-    "data and the margin on each order",
+    "ownership_no_markup": "build toward ownership: whether a vendor sits between them and their "
+    "processor, patient data and margin per order; if the facts show their own store or checkout, "
+    "build toward physician cost per patient instead",
     "clinical_quality_refills": "build toward retention: patients who get real consults and multiple "
     "refills stay, and one physician fee instead of one per medication",
     "plain": "state plainly what we would change for them",
@@ -192,18 +205,27 @@ _ANGLE_HINTS = {
 def _prompt(facts: dict[str, str]) -> str:
     angle = _ANGLE_HINTS.get(facts.get("angle", ""), _ANGLE_HINTS["plain"])
     return (
-        "You are Shubh, founder of MyOrbit Health (white-label telehealth: our physicians do the "
-        "consults, pharmacy fulfilment, intake and checkout under the client's brand). You have studied "
-        "the business below and are writing the two or three sentences that come right after 'Hi "
-        "<name>,' in a short cold email. The rest of the email (our offer, the guarantee, the ask) is "
-        "already written, so do not describe our offer at all.\n"
-        "Sentence 1: what they sell and how they run it today, in their own terms (program names, the "
-        "platform they use, who prescribes, where they are, that they run ads or sell online). "
-        "Sentence 2: the cost or friction that setup almost certainly creates for them, concretely: a "
-        "consult fee charged per medication, a platform cut on every order, a processor and patient "
-        "data they do not control, patients dropping off when refills are a fight. Pick the one that "
-        f"fits this angle: {angle}. Sentence 3 (optional, under ten words): a plain bridge in your own words that points at "
-        "that one cost or friction; vary it, never reuse an example phrase.\n"
+        "You write the first lines of cold emails for MyOrbit Health (white-label telehealth: our "
+        "physicians do the consults, pharmacy fulfilment, intake and checkout under the client's "
+        "brand); a member of our partnerships team signs them. You have studied the business below and "
+        "are writing the two or three sentences that come right after 'Hi <name>,'. The rest of the "
+        "email (our offer, the guarantee, the ask) is already written, so do not describe our offer at "
+        "all.\n"
+        "Sentence 1: what they sell and how they run it today, in their own terms (program names, who "
+        "prescribes, where they are, that they run ads or sell online). Use only what the facts show. "
+        "The 'platform' fact is a guess from a page fingerprint: never say their checkout, records or "
+        "processor run on it, never say it takes a cut, and name it at most as 'you work with X' when "
+        "the page summary also mentions it. Never name a vendor the facts do not contain.\n"
+        "Sentence 2: the cost that setup usually creates, hedged and generic, in the shape that fits "
+        f"this angle: {angle}. Allowed shapes: a consult fee per medication, a markup at the pharmacy, "
+        "a vendor cut per order, physician time that grows with volume, patients dropping off when "
+        "refills are a fight. Never assert they do not control their processor or data. If the facts "
+        "show their own store or checkout, do not use the ownership shape at all.\n"
+        "If the contact's title says they prescribe (NP, PA, MD, DO, physician, nurse practitioner, "
+        "provider, medical director), do not suggest their consults are not real or that someone else "
+        "prescribes; write about fee structure and physician time instead.\n"
+        "Sentence 3 (optional, under ten words): a plain bridge in your own words that points at that "
+        "one cost; vary it, never reuse an example phrase.\n"
         "Hard rules: at most 75 words. No greeting, no name, no sign-off, no question, no exclamation "
         "mark, no bullet, no em dash, no flattery, no medical outcome claim, no price, no percentage, no "
         "mention of MyOrbit or of our fees. One hedge word at most ('likely' or 'probably'). Never "
@@ -291,6 +313,29 @@ def booking_link_for(lead: Lead, rep: RepLike | None, segment: str, utm_content:
     return f"{base}{'&' if '?' in base else '?'}{tags}"
 
 
+_TITLE_SPLIT = re.compile(r"\s+(?:\||-|\u2013|\u2014|:|\u2022|\u00b7)\s+")
+_TITLE_VERBS = re.compile(
+    r"\s+(?:provides|offers|delivers|helps|is|are|brings|specializ\w+|serving|serves)\b.*$", re.IGNORECASE
+)
+
+
+def display_company_name(lead: Lead) -> str:
+    """The brand as a person would write it, never a scraped page title.
+
+    'Rose MedSpa & Wellness Provides Services & Products to Restore Skin & Body' -> 'Rose MedSpa &
+    Wellness'; 'Luvo Health | Weight Loss Online' -> 'Luvo Health'. Falls back to the domain.
+    """
+    raw = html.unescape((lead.company_name or "").strip())
+    if not raw:
+        return lead.domain
+    name = _TITLE_SPLIT.split(raw)[0].strip()
+    if len(name) > 40:
+        name = _TITLE_VERBS.sub("", name).strip()
+    if len(name) > 40 or len(name.split()) > 6:
+        name = " ".join(name.split()[:4])
+    return name or lead.domain
+
+
 def build_custom_fields(
     lead: Lead,
     rep: RepLike | None = None,
@@ -307,7 +352,7 @@ def build_custom_fields(
     platform = lead_platform(lead)
     return {
         "first_name": first_name or "",
-        "company_name": lead.company_name or lead.domain,
+        "company_name": display_company_name(lead),
         "opener": opener,
         "platform": platform or DEFAULT_PLATFORM,
         "vertical_phrase": vertical_phrase(lead),

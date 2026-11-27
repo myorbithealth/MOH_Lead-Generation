@@ -100,8 +100,9 @@ def test_happy_path_sends_patches_and_logs_activity():
     [body] = rec.replies()
     assert body == {
         "email_stats_id": "stats-abc",
-        "email_body": "Hi Dana,<br>Here is my calendar: https://cal.example/shubh<br><br>Shubh",
-        "add_signature": False,
+        # the persona mailbox signs via Smartlead's signature, so the draft's sign-off line is dropped
+        "email_body": "Hi Dana,<br>Here is my calendar: https://cal.example/shubh",
+        "add_signature": True,
         "to_email": "dana@brand.com",
         "to_first_name": "Dana",
         "to_last_name": "Lee",
@@ -234,8 +235,8 @@ def test_placeholder_booking_link_filled_from_approver():
     send_approved(portal, _smartlead(rec), now=NOW)
 
     [body] = rec.replies()
-    assert body["email_body"] == (
-        "Grab a time: https://cal.example/shubh?lead_domain=brand.com&amp;contact_id=c1<br>Shubh"
+    assert (
+        body["email_body"] == "Grab a time: https://cal.example/shubh?lead_domain=brand.com&amp;contact_id=c1"
     )
     assert "{{" not in portal.tables["activities"][0]["body"]
 

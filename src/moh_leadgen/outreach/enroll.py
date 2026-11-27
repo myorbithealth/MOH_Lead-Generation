@@ -44,7 +44,6 @@ from .sequences import (
     render,
     smartlead_sequences,
     variant_label,
-    with_footer,
 )
 from .smartlead import WEBHOOK_EVENTS, SmartleadError
 
@@ -278,7 +277,8 @@ def render_steps(chosen: dict[int, Variant], fields: dict[str, str]) -> dict[str
     for step, variant in sorted(chosen.items()):
         if step == 1:
             out["step1_subject"] = render(variant.subject or "", fields)
-        out[f"step{step}_body"] = as_email_html(render(with_footer(variant.body or ""), fields))
+        # Sign-off and footer live in the Smartlead template (sequences.template_body), not here.
+        out[f"step{step}_body"] = as_email_html(render(variant.body or "", fields).strip())
     return out
 
 

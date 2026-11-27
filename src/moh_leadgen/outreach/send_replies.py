@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import html
 import logging
+import re
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -36,9 +37,10 @@ log = logging.getLogger(__name__)
 BOOKING_PLACEHOLDER = "{{booking_link}}"
 SENDER_PLACEHOLDER = "{{sender_name}}"
 ACTIVITY_BODY_CHARS = 200
-# The classifier signs drafts as {{sender_name}}, so Smartlead's mailbox signature would sign twice.
-# app_settings.outreach.reply_add_signature = true turns it on.
-DEFAULT_ADD_SIGNATURE = False
+# Replies go out from the persona mailbox that started the thread, so Smartlead's mailbox signature
+# signs them and the draft's {{sender_name}} line is dropped. app_settings.outreach.reply_add_signature
+# = false restores the old behaviour (rep name in the body, no signature).
+DEFAULT_ADD_SIGNATURE = True
 
 
 class SendFailed(Exception):
@@ -214,7 +216,7 @@ class ApprovedSender:
         payload: dict[str, Any] = {
             "email_stats_id": str(stats_id),
             "email_body": body_to_html(text),
-            "add_signature": bool(self.outreach.get("reply_add_signature", DEFAULT_ADD_SIGNATURE)),
+            "add_signature": self.add_signature,
         }
         optional = {
             "to_email": row.get("to_email"),
@@ -249,11 +251,20 @@ class ApprovedSender:
                 raise SendFailed("{{booking_link}} is still in the body and no booking link is configured")
             text = text.replace(BOOKING_PLACEHOLDER, link)
         if SENDER_PLACEHOLDER in text:
-            name = rep.get("name") or settings.outreach_sender_name
-            if not name:
-                raise SendFailed("{{sender_name}} is still in the body and no sender name is configured")
-            text = text.replace(SENDER_PLACEHOLDER, name)
+            if self.add_signature:
+                # The sending mailbox (a persona such as grant@) signs through Smartlead's signature,
+                # so the draft's own sign-off line goes.
+                text = re.sub(r"[ \t]*" + re.escape(SENDER_PLACEHOLDER) + r"[ \t]*", "", text).rstrip()
+            else:
+                name = rep.get("name") or settings.outreach_sender_name
+                if not name:
+                    raise SendFailed("{{sender_name}} is still in the body and no sender name is configured")
+                text = text.replace(SENDER_PLACEHOLDER, name)
         return text
+
+    @property
+    def add_signature(self) -> bool:
+        return bool(self.outreach.get("reply_add_signature", DEFAULT_ADD_SIGNATURE))
 
     def _rep(self, approver_id: str | None) -> dict:
         if not approver_id:

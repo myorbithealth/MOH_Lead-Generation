@@ -153,17 +153,19 @@ class CampaignDef:
 # medication; we are a physician network that does the consults; patients get multiple refills;
 # everything is customisable. One proof line per segment colours the ask.
 _PROOF = {
-    "glp1_competitor": "You keep your storefront, pricing and patient list; our physician network runs "
-    "consults, refills and pharmacy fulfilment behind it, with no markup on the medication.",
-    "trt_peptides": "Our physician network runs consults and ongoing refills, and partner pharmacies "
-    "ship under your brand with no markup on the medication.",
-    "med_spa_clinic": "A clinic or gym can offer prescription programs without hiring prescribers or "
+    "glp1_competitor": "you keep your storefront, pricing and patient list; our physician network runs "
+    "consults and refills behind it, and the pharmacy can stay yours or come from our "
+    "LegitScript-reviewed partners, with no markup on the medication.",
+    "trt_peptides": "our physician network runs consults and ongoing refills, and the pharmacy can stay "
+    "yours or come from our LegitScript-reviewed partners, shipping under your brand with no markup "
+    "on the medication.",
+    "med_spa_clinic": "a med spa or clinic can offer prescription programs without hiring prescribers or "
     "setting up a pharmacy, and keeps the patient relationship.",
-    "pharmacy_general": "We can sit behind your brand as the provider and intake layer, or run the "
+    "pharmacy_general": "we can sit behind your brand as the provider and intake layer, or run the "
     "whole stack; either way the processor and the data stay yours.",
-    "other": "We can run the whole stack, or only the provider and pharmacy layer behind what you "
+    "other": "we can run the whole stack, or only the provider and pharmacy layer behind what you "
     "already have; the processor and the data stay yours.",
-    FDA_SEGMENT: "Every patient gets a real consult with a prescriber licensed in their state, and "
+    FDA_SEGMENT: "every patient gets a real consult with a prescriber licensed in their state, and "
     "orders ship from LegitScript-reviewed partner pharmacies under your brand.",
 }
 
@@ -174,7 +176,10 @@ _GUARANTEE = (
 )
 _OWN = "You keep your own payment processor and your patient data. We don't mark up the medication."
 
-_SIGN_OFF = "{{sender_name}}"
+# The sign-off is not rendered into the body: Smartlead fills %signature% in the sequence template
+# from the sending mailbox, so each persona signs its own emails (see smartlead_sequences).
+_SIGN_OFF = ""
+SIGNATURE_TAG = "%signature%"
 _ASK_DEMO = "Worth 20 minutes to run your numbers side by side? {{booking_link}}"
 
 
@@ -183,7 +188,7 @@ def _step1_variants(segment: str) -> tuple[VariantDef, ...]:
         VariantDef(
             name="price_beat",
             angle="price_beat_guarantee",
-            subject="your {{platform}} costs",
+            subject="your per-consult costs",
             body=(f"Hi {{{{first_name}}}},\n\n{{{{opener}}}}\n\n{_GUARANTEE}\n\n{_ASK_DEMO}\n\n{_SIGN_OFF}"),
             hypothesis="A price-beat guarantee on consults and meds is the sharpest reason to take a call.",
         ),
@@ -261,10 +266,10 @@ def _follow_ups(segment: str) -> tuple[StepDef, ...]:
                     subject="",
                     body=(
                         "Hi {{first_name}},\n\n"
-                        "Another way to look at it. Today it's a platform fee, a processor you don't "
-                        "control, a consult charge per medication and a markup on every order. With us "
-                        "it's one physician network, one fee per patient, and you keep the processor, "
-                        "the data and the margin.\n\n"
+                        "Another way to look at it. Most programs we talk to pay a consult charge per "
+                        "medication and a markup on every order, often with a platform fee on top. With "
+                        "us it's one physician network, one fee per patient across every medication, no "
+                        "markup, and you keep your processor, your data and the margin.\n\n"
                         f"Happy to walk through it in 20 minutes: {{{{booking_link}}}}\n\n{_SIGN_OFF}"
                     ),
                     hypothesis="Vendor consolidation and ownership land with operators who skipped the first angle.",
@@ -460,6 +465,16 @@ def all_variants() -> list[Variant]:
     return [v for key in CAMPAIGN_KEYS for v in campaign_variants(key)]
 
 
+def template_body(step: int) -> str:
+    """The Smartlead-side body: our rendered step, the sending mailbox's signature, the legal footer.
+
+    %signature% is Smartlead's tag for the mailbox signature (set per account), so a lead written to
+    by grant@ is signed by Grant. The footer's {{company_name_legal}} and {{postal_address}} are lead
+    custom fields that Smartlead fills at send time.
+    """
+    return f"{{{{step{step}_body}}}}<br><br>{SIGNATURE_TAG}<br><br>{as_email_html(FOOTER)}"
+
+
 def smartlead_sequences(campaign: CampaignDef) -> list[dict]:
     """The `sequences` payload for POST /campaigns/{id}/sequences: placeholders filled per lead."""
     out = []
@@ -471,7 +486,7 @@ def smartlead_sequences(campaign: CampaignDef) -> list[dict]:
                 "seq_number": step.step,
                 "seq_delay_details": {"delay_in_days": step.day - previous_day},
                 "subject": "{{step1_subject}}" if step.step == 1 else "",
-                "email_body": f"{{{{step{step.step}_body}}}}",
+                "email_body": template_body(step.step),
             }
         )
         previous_day = step.day

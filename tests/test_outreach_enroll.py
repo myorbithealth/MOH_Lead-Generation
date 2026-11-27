@@ -138,7 +138,7 @@ def test_smartlead_sequence_delays_are_gaps_between_steps():
     seqs = smartlead_sequences(CAMPAIGNS["other"])
     assert [s["seq_delay_details"]["delay_in_days"] for s in seqs] == [0, 3, 4, 7]
     assert seqs[0]["subject"] == "{{step1_subject}}"
-    assert seqs[3]["email_body"] == "{{step4_body}}"
+    assert seqs[3]["email_body"].startswith("{{step4_body}}<br><br>%signature%")
 
 
 # ------------------------------------------------------------------ gate
@@ -290,8 +290,8 @@ class FakeAnthropic:
     def __init__(
         self,
         text=(
-            '{"opener": "Acme Health runs its GLP-1 program on Healthie, so you already pay a platform '
-            'fee, a consult charge per medication and a cut of every order. We would change all three."}'
+            '{"opener": "Acme Health sells its GLP-1 program online and works with Healthie, so you already '
+            'pay a platform fee, a consult charge per medication and a markup on every order. We would change all three."}'
         ),
         stop="end_turn",
     ):
@@ -604,7 +604,9 @@ def test_enroll_is_idempotent_and_writes_store_and_portal(store, tmp_path, setti
     assert {"step1_subject", "step1_body", "step4_body", "opener", "booking_link", "postal_address"} <= set(
         cf
     )
-    assert "1 Main St" in cf["step1_body"] and "{{" not in cf["step1_body"]
+    # the legal footer is filled by Smartlead from these custom fields, not rendered into the body
+    assert "1 Main St" in cf["postal_address"] and "1 Main St" not in cf["step1_body"]
+    assert "{{" not in cf["step1_body"]
 
     lead = store.get("acmehealth.com")
     assert lead.outreach.enrolled_at == NOW
@@ -831,3 +833,68 @@ def test_cli_sink_is_built_from_the_proxy_token_alone(monkeypatch):
     )
     monkeypatch.setattr(cli_enroll.settings, "portal_token", "tok")
     assert cli_enroll._sink() is not None
+
+
+def test_smartlead_template_carries_signature_and_footer_and_bodies_do_not():
+    from moh_leadgen.outreach import sequences as seq
+
+    payload = seq.smartlead_sequences(seq.CAMPAIGNS["glp1_competitor"])
+    for row in payload:
+        assert seq.SIGNATURE_TAG in row["email_body"]
+        assert "{{company_name_legal}}" in row["email_body"] and "{{postal_address}}" in row["email_body"]
+        assert row["email_body"].startswith("{{step")
+    steps = enroll_mod.load_variants(None)["glp1_competitor"]
+    chosen = {step: arms[0] for step, arms in steps.items()}
+    fields = {**SAMPLE_FIELDS, "sender_name": "Shubh"}
+    rendered = enroll_mod.render_steps(chosen, fields)
+    for key, body in rendered.items():
+        if key.endswith("_body"):
+            assert "Shubh" not in body and "Wilmington" not in body and not body.endswith("<br>")
+    assert rendered["step1_subject"] in {"your per-consult costs"}
+
+
+def test_follow_ups_hedge_the_prospects_cost_structure():
+    from moh_leadgen.outreach import sequences as seq
+
+    step3 = next(v for s in seq.CAMPAIGNS["glp1_competitor"].steps if s.step == 3 for v in s.variants)
+    assert "Today it's a platform fee" not in step3.body
+    assert "Most programs we talk to" in step3.body
+    step2 = next(v for s in seq.CAMPAIGNS["glp1_competitor"].steps if s.step == 2 for v in s.variants)
+    assert "pharmacy fulfilment behind it" not in step2.body
+    assert "gym" not in seq.CAMPAIGNS["med_spa_clinic"].steps[1].variants[0].body
+
+
+def test_display_company_name_drops_page_titles():
+    from moh_leadgen.outreach.personalize import display_company_name
+
+    def lead(name, domain="x.com"):
+        return Lead(domain=domain, company_name=name)
+
+    assert (
+        display_company_name(
+            lead("Rose MedSpa &amp; Wellness Provides Services & Products to Restore Skin & Body")
+        )
+        == "Rose MedSpa & Wellness"
+    )
+    assert display_company_name(lead("Luvo Health | Weight Loss Online")) == "Luvo Health"
+    assert display_company_name(lead("Cache Medical")) == "Cache Medical"
+    assert (
+        display_company_name(lead("Top Texas Telehealth for Men's Wellness"))
+        == "Top Texas Telehealth for Men's Wellness"
+    )
+    assert display_company_name(lead(None, "vitalcore-health.com")) == "vitalcore-health.com"
+
+
+def test_opener_rejects_platform_claims():
+    from moh_leadgen.outreach.personalize import _valid_opener
+
+    good = (
+        "Increase Health sells physician-prescribed weight management, peptide therapy and clinical skin "
+        "care online, with Elite Care Health providers prescribing and Rx Ave Health dispensing the orders. "
+        "Running three programs usually means paying for consults per medication and a markup at the pharmacy."
+    )
+    assert _valid_opener(good)
+    bad = good.replace("with Elite Care Health providers prescribing", "with RxAve behind the storefront")
+    assert not _valid_opener(bad)
+    assert not _valid_opener(good.replace("a markup at the pharmacy", "a platform cut on every order"))
+    assert not _valid_opener(good.replace("dispensing the orders", "running a checkout that runs on Telegra"))
