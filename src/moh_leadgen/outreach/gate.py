@@ -115,7 +115,7 @@ def _generic_rank(email: str) -> int | None:
 def _has_corporate_email(lead: Lead) -> bool:
     """Any cleaned, non-junk address on a non-free-mail domain."""
     return any(
-        not is_freemail(e) and classify_local_part(e, lead.owner_name) != "junk"
+        not is_freemail(e) and classify_local_part(e, lead.owner_name, lead.domain) != "junk"
         for e in email_hygiene.lead_emails(lead)
     )
 
@@ -142,7 +142,9 @@ def candidate_contacts(lead: Lead) -> list[Contact]:
             contact.kind = "junk"
         else:
             owner_match = matches_owner(key, name) or matches_owner(key, lead.owner_name)
-            contact.kind = classify_local_part(key, name if matches_owner(key, name) else lead.owner_name)
+            contact.kind = classify_local_part(
+                key, name if matches_owner(key, name) else lead.owner_name, lead.domain
+            )
             if contact.kind == "person" and not owner_match and is_generic_mailbox(key):
                 contact.kind = "role"  # the extractor's wider role pattern (patientsupport@, pr@ ...)
             contact.is_freemail = is_freemail(key)

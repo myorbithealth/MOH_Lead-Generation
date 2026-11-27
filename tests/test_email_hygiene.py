@@ -334,3 +334,16 @@ def test_has_mx_unknown_when_resolver_cannot_answer_control_domain(monkeypatch):
     monkeypatch.setattr(eh, "_MX_TRUST", {})
     monkeypatch.setattr(eh, "_MX_CACHE", {})
     assert eh.has_mx("luvohealth.com") is None
+
+
+def test_brand_and_short_boxes_are_roles():
+    from moh_leadgen.enrich.email_hygiene import classify_local_part as c
+
+    assert c("zaddyhealth@zaddy.io", None, "zaddy.io") == "role"
+    assert c("glamslimhcg@gmail.com", None, "glamslimrx.com") == "role"
+    assert c("rt@telepurehealth.com", None, "telepurehealth.com") == "role"
+    assert c("nclientcare@arealchangehealth.com", None, "arealchangehealth.com") == "role"
+    assert c("hipaa@renuviarx.com", None, "renuviarx.com") == "role"
+    assert c("inquires@leveluprx.com", None, "leveluprx.com") == "role"
+    assert c("randi@myalloy.com", None, "myalloy.com") == "person"
+    assert c("zaddy@zaddy.io", "Zaddy Smith", "zaddy.io") == "person"

@@ -98,6 +98,33 @@ PLATFORM_DOMAINS = {
 }
 ROLE_LOCALS = {
     "info",
+    "hipaa",
+    "inquires",
+    "inquire",
+    "inquiry",
+    "arbitration",
+    "medicalrecords",
+    "records",
+    "connect",
+    "dispute",
+    "disputes",
+    "refunds",
+    "returns",
+    "shipping",
+    "fulfillment",
+    "fulfilment",
+    "labs",
+    "lab",
+    "rx",
+    "pharmacist",
+    "providers",
+    "provider",
+    "clinical",
+    "nursing",
+    "intake",
+    "onboarding",
+    "consults",
+    "consult",
     "hello",
     "hi",
     "hey",
@@ -118,7 +145,6 @@ ROLE_LOCALS = {
     "office",
     "admin",
     "sales",
-    "rx",
     "pharmacy",
     "health",
     "wellness",
@@ -151,7 +177,6 @@ ROLE_LOCALS = {
     "enquiries",
     "enquiry",
     "inquiries",
-    "inquiry",
     "questions",
     "feedback",
     "newsletter",
@@ -308,7 +333,9 @@ def _hash_like(local: str) -> bool:
     return len(letters) >= 20 and not re.search(r"[aeiouy]", letters)
 
 
-def classify_local_part(email: str, owner_name: str | None = None) -> LocalKind:
+def classify_local_part(
+    email: str, owner_name: str | None = None, company_domain: str | None = None
+) -> LocalKind:
     """'person', 'role' or 'junk' for one (already cleaned) address.
 
     junk: platform/registrar/vendor domains, system mailboxes (noreply, postmaster, privacy...),
@@ -328,7 +355,38 @@ def classify_local_part(email: str, owner_name: str | None = None) -> LocalKind:
     is_role = base in ROLE_LOCALS or flat in ROLE_LOCALS
     if owner_match and not (base in ROLE_LOCALS and base == flat):
         return "person"  # first.last / flast style owner match wins over a role word
-    return "role" if is_role else "person"
+    if is_role:
+        return "role"
+    # escaped-newline residue: "nclientcare" is "\nclientcare" with the backslash lost
+    if flat.startswith("n") and flat[1:] in ROLE_LOCALS:
+        return "role"
+    # two-letter boxes (rt@, hr@, pr@) and brand-named boxes (zaddyhealth@zaddy.io) are not people
+    if len(flat) <= 2 and flat.isalpha():
+        return "role"
+    label = _brand_label(company_domain)
+    if label and not owner_match and _shares_brand(flat, label):
+        return "role"
+    return "person"
+
+
+def _shares_brand(flat: str, label: str) -> bool:
+    """zaddyhealth ~ zaddy, glamslimhcg ~ glamslimrx: the box is named after the company."""
+    if len(label) >= 4 and (flat == label or label in flat):
+        return True
+    common = 0
+    for a, b in zip(flat, label, strict=False):
+        if a != b:
+            break
+        common += 1
+    return common >= 6 and common >= 0.6 * len(label)
+
+
+def _brand_label(company_domain: str | None) -> str:
+    """'zaddy' for zaddy.io, 'glamslimrx' for www.glamslimrx.com; '' when unknown."""
+    if not company_domain:
+        return ""
+    reg = registrable(company_domain) or company_domain
+    return re.sub(r"[^a-z0-9]", "", reg.split(".")[0].lower())
 
 
 def is_cross_company_duplicate(email: str, domain: str, seen: dict[str, set[str]]) -> bool:
@@ -436,7 +494,7 @@ def _mx_lookups_trustworthy() -> bool:
     if "ok" not in _MX_TRUST:
         try:
             verdict = _lookup_mx(MX_CONTROL_DOMAIN, _default_resolver())
-        except Exception:  # a test double that knows nothing about the control domain
+        except (KeyError, AttributeError, TypeError):  # a test double that knows nothing about gmail.com
             verdict = True
         _MX_TRUST["ok"] = verdict is True
         if not _MX_TRUST["ok"]:
