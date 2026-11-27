@@ -815,3 +815,19 @@ def test_load_variants_portal_rows_replace_builtin_for_that_step_only():
     steps = enroll_mod.load_variants(Sink())["glp1_competitor"]
     assert [v.name for v in steps[1]] == ["portal_only"]
     assert len(steps[2]) >= 1  # built-in copy still fills the uncovered steps
+
+
+def test_cli_sink_is_built_from_the_proxy_token_alone(monkeypatch):
+    """Regression: the first live enrolment ran local-only because only the service key counted."""
+    from moh_leadgen.outreach import cli_enroll
+
+    monkeypatch.setattr(cli_enroll.settings, "supabase_url", "")
+    monkeypatch.setattr(cli_enroll.settings, "supabase_key", "")
+    monkeypatch.setattr(cli_enroll.settings, "portal_proxy_url", "")
+    monkeypatch.setattr(cli_enroll.settings, "portal_token", "")
+    assert cli_enroll._sink() is None
+    monkeypatch.setattr(
+        cli_enroll.settings, "portal_proxy_url", "https://portal.example/api/public/pipeline-db"
+    )
+    monkeypatch.setattr(cli_enroll.settings, "portal_token", "tok")
+    assert cli_enroll._sink() is not None

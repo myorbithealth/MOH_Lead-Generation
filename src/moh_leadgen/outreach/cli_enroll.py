@@ -27,8 +27,13 @@ def _store() -> LeadStore:
 
 
 def _sink():
-    """The portal sink when SUPABASE_URL and the service key are set, else None (local only)."""
-    if not (settings.supabase_url and settings.supabase_key):
+    """The portal sink when the pipeline-db proxy token or the service key is set, else None.
+
+    Without it every outreach command runs local-only and its portal rows wait in the store.
+    """
+    proxy = settings.portal_proxy_url and settings.portal_token
+    direct = settings.supabase_url and settings.supabase_key
+    if not (proxy or direct):
         return None
     from ..sinks.supabase import SupabaseSink
 
