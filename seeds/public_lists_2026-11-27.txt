@@ -1,0 +1,132 @@
+# Public seed list: US companies selling prescription telehealth programs direct to consumers.
+# Format: one registrable domain per line, lowercase, no scheme. '#' starts a comment.
+# Use with: leadgen discover competitor --seed seeds/public_lists_2026-11-27.txt
+# Built 2026-11-27. Skipped: platform vendors, pharmacy wholesalers/compounders, rogue
+# internet pharmacies, and domains already in competitor_platform_seed_domains.txt or
+# legitscript_seed_domains.txt (bluechew.com, getzealthy.com, healthon.com, maximustribe.com,
+# nexlife.us, orderlymeds.com, skinnyrx.com, tryeden.com). See seeds/README.md for sources.
+
+# ---------------------------------------------------------------------------
+# Source: FDA CDER warning letters, subject 'False & Misleading Claims/Misbranded (Telehealth)'
+#   2026-10-30 (RonanRx) and 2026-06-08 batch (25 letters)
+#   Index: https://www.fda.gov/inspections-compliance-enforcement-and-criminal-investigations/compliance-actions-and-activities/warning-letters
+#   (search 'telehealth'); domain = the website named in each letter.
+#   Fetched: 2026-11-27
+ronanrx.com
+altrx.com
+mintmed.com
+joinezra.com
+drmedhealth.com
+dhmedicalcenter.com
+tryamie.com
+altrutelehealth.com
+nativemed.net
+getamrx.com
+momentumhealth360.com
+medicaweightloss.com
+clovermeds.com
+roenrx.com
+joiandblokes.com
+viviomd.com
+thrivelab.com
+harpermeds.com
+novarx.co
+readymednow.com
+hydramed.com
+fitish.com
+
+# ---------------------------------------------------------------------------
+# Source: FDA CDER warning letters, subject 'False & Misleading Claims/Misbranded (Telehealth)'
+#   2026-02-20 batch (30 letters, announced 2026-03-03)
+#   Index: https://www.fda.gov/inspections-compliance-enforcement-and-criminal-investigations/compliance-actions-and-activities/warning-letters
+#   (search 'telehealth'); domain = the website named in each letter.
+#   Fetched: 2026-11-27
+premiumhealth.us
+joinbliv.com
+bluefitmd.com
+deluxeivaesthetics.com
+fifty410.com
+fitrxapp.com
+trygenesis.com
+getzeuss.com
+zappyhealth.com
+struthealth.com
+refills.com
+joinweightcare.com
+vivrx.com
+peakscurative.com
+pharmazee.co
+goodgirlrx.com
+ivimhealth.com
+joinjosie.com
+kinmeds.com
+joinlevity.com
+maxlife.com
+trymeasured.com
+medvi.io
+newmanclinic.com
+newself.com
+24hrdoc.com
+alanmeds.com
+myamphealth.com
+joinbelle.com
+
+# ---------------------------------------------------------------------------
+# Source: FDA CDER warning letters, subject 'False & Misleading Claims/Misbranded (Telehealth)'
+#   2025-09-09 batch (letters posted 2025-09-16)
+#   Index: https://www.fda.gov/inspections-compliance-enforcement-and-criminal-investigations/compliance-actions-and-activities/warning-letters
+#   (search 'telehealth'); domain = the website named in each letter.
+#   Fetched: 2026-11-27
+erasingage.com
+healthyliving.clinic
+forhers.com
+amazing-meds.com
+genlabmeds.com
+getfitmedical.com
+fwd.care
+ivisitdoc.com
+leandreamsweightloss.com
+ybycmeds.com
+trynovamd.com
+thehcginstitute.com
+vitalsrx.com
+villashealth.com
+tuyohealth.com
+lovelymeds.com
+thelyferx.com
+inspire.clinic
+gobioverse.com
+rxmadesimple.com
+elevatedhealth.com
+cosmomedspa.com
+evolifewellness.com
+edrugstore.com
+nuvolifehealth.com
+sema.bio
+directmeds.com
+hims.com
+drjennpb.com
+maneandsteel.com
+lumimeds.com
+glp1solution.store
+asn-labs.com
+bodygoodstudio.com
+all-american-wellness.com
+healthymale.com
+intimaterose.com
+invigoratemedspa.com
+drgatergetsresults.com
+remedymeds.com
+coretrustlabs.com
+fancymeds.com
+mystarthealth.com
+eliterapidfatloss.com
+getcurex.com
+julymd.com
+slendid.com
+hellocake.com
+biopreventative.com
+joinsprouthealth.com
+trymhealth.com
+healberry.com
+resetiv.com

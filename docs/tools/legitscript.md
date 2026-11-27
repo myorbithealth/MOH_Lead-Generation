@@ -46,3 +46,17 @@ leadgen sync portal --tool legitscript --min-score 40
 * Verticals and their keywords: `VERTICALS` in `enrich/legitscript.py`.
 * Weights: `VERTICAL_WEIGHTS` and `score_lead` in `scoring.py`.
 * Enterprise brands to down-rank: `ENTERPRISE_DOMAINS` in `domains.py`.
+
+## Refreshing the public seed lists
+
+`seeds/public_lists_<date>.txt` is built from free government records, and `seeds/README.md` lists
+the evidence URLs. To refresh it, open the FDA warning letter index, search for "telehealth" and sort by
+issue date. Then, for each new letter with the subject "False & Misleading Claims/Misbranded (Telehealth)",
+copy the website the letter names (not a domain guessed from the company name). Skip compounders,
+503B outsourcing facilities, peptide or "research" sellers, rogue internet pharmacies and platform vendors
+(`PLATFORM_OWNED` in `tools/competitor_platform.py`). Also skip domains that are already in the other
+seed files. Write the results to a new dated file, with a comment block above each batch giving the source
+URL and the fetch date. Next, run `pytest tests/test_seed_lists.py` (point its `SEED` path at the new file)
+and feed the file to `leadgen discover competitor --seed <file>`. LegitScript has no public merchant list,
+so check its seal on each site during enrichment. The Alaska Telemedicine Business Registry spreadsheet
+must be downloaded by hand.
