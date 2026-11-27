@@ -14,6 +14,7 @@ from rich.table import Table
 from .config import settings
 from .http import PoliteClient
 from .models import Lead
+from .outreach.cli import outreach_app
 from .pipeline import enrich_lead
 from .scoring import score_lead
 from .store import LeadStore
@@ -21,6 +22,7 @@ from .tools import TOOLS
 
 app = typer.Typer(help="MyOrbit Health lead generation", no_args_is_help=True, add_completion=False)
 console = Console()
+app.add_typer(outreach_app, name="outreach")
 
 
 def _store() -> LeadStore:

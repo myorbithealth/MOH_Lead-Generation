@@ -7,8 +7,20 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-LeadSource = Literal["legitscript", "competitor_platform", "local_business", "manual"]
-LeadStatus = Literal["new", "reviewed", "contacted", "meeting_booked", "promoted", "disqualified"]
+from .outreach.models import OutreachState
+
+LeadSource = Literal["legitscript", "competitor_platform", "local_business", "manual", "meta_ads", "inbound"]
+LeadStatus = Literal[
+    "new",
+    "reviewed",
+    "contacted",
+    "enrolled",
+    "replied",
+    "meeting_booked",
+    "promoted",
+    "disqualified",
+    "unsubscribed",
+]
 LegitScriptStatus = Literal["seal_detected", "mentioned", "not_found", "unchecked"]
 
 
@@ -55,6 +67,15 @@ class Lead(BaseModel):
     source: LeadSource = "manual"
     discovered_via: str | None = None
     source_detail: dict[str, Any] = Field(default_factory=dict)
+    also_found_via: list[str] = Field(default_factory=list)  # corroborating discovery sources
+
+    # enrichment attempts (crawl failures back off instead of being parked forever)
+    attempts: int = 0
+    last_attempt_at: datetime | None = None
+    next_retry_at: datetime | None = None
+    last_error_kind: str | None = None  # dns | timeout | blocked | robots | http_4xx | http_5xx | other
+
+    outreach: OutreachState = Field(default_factory=OutreachState)
 
     vertical: str | None = None
     description: str | None = None
