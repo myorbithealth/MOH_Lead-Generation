@@ -278,6 +278,44 @@ def sync(
     return n
 
 
+def portal_configured() -> bool:
+    """Either way of reaching the Sales Portal: the pipeline-db proxy, or PostgREST + service key."""
+    return bool(
+        (settings.portal_proxy_url and settings.portal_token)
+        or (settings.supabase_url and settings.supabase_key)
+    )
+
+
+@app.command("pull-portal")
+def pull_portal(
+    since: str | None = typer.Option(
+        None, help="Only portal rows updated on or after this date or ISO time (e.g. 2026-01-01)"
+    ),
+    limit: int = typer.Option(0, help="Stop after this many portal rows (0 = all)"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Count what would change; write nothing"),
+):
+    """Rebuild the local store from the Sales Portal's leads and contacts tables.
+
+    Local rows newer than the portal row are kept. Pulled rows are marked synced, so the next
+    `sync portal` does not push them straight back.
+    """
+    from .sinks.portal_import import pull_portal as run_pull
+    from .sinks.supabase import SupabaseSink
+
+    since_dt = None
+    if since:
+        try:
+            since_dt = datetime.fromisoformat(since)
+        except ValueError as exc:
+            raise typer.BadParameter(f"--since must be an ISO date or time, got {since!r}") from exc
+        if since_dt.tzinfo is None:
+            since_dt = since_dt.replace(tzinfo=UTC)
+    stats = run_pull(_store(), SupabaseSink(), since=since_dt, limit=limit or None, dry_run=dry_run)
+    prefix = "[bold]dry run[/]: " if dry_run else ""
+    rprint(f"{prefix}pull-portal: {stats.summary()}")
+    return stats
+
+
 @app.command()
 def run(
     tool: str = typer.Argument(..., help="legitscript | competitor | local"),
@@ -409,6 +447,11 @@ def _portal_client():
         raise StepSkipped(str(exc)) from exc
 
 
+# `leadgen daily` rebuilds the store from the portal first when it holds fewer leads than this
+# (a fresh runner whose Actions cache was evicted).
+PULL_PORTAL_BELOW = 50
+
+
 def _daily_steps(
     *,
     discover_limit: int,
@@ -499,7 +542,14 @@ def _daily_steps(
         report = learn(_portal_client(), propose=3, dry_run=False)
         return f"{len(report['proposed'])} proposed, {report['applied']} applied"
 
-    steps: list[tuple[str, Callable[[], object]]] = [(f"discover {t}", _discover(t)) for t in TOOLS]
+    def _pull() -> object:
+        _require(portal_configured(), "portal settings not set")
+        have = _store().count()
+        _require(have < PULL_PORTAL_BELOW, f"store already has {have} leads")
+        return pull_portal(since=None, limit=0, dry_run=False).summary()
+
+    steps: list[tuple[str, Callable[[], object]]] = [("pull portal", _pull)]
+    steps += [(f"discover {t}", _discover(t)) for t in TOOLS]
     steps += [
         ("enrich", lambda: _enrich(False)),
         ("enrich --retry-failed", lambda: _enrich(True)),
@@ -527,7 +577,7 @@ def daily(
     enroll_: bool = typer.Option(True, "--enroll/--no-enroll", help="Enrol new leads into Smartlead"),
     classify_: bool = typer.Option(True, "--classify/--no-classify", help="Classify new replies"),
 ):
-    """Run the whole day: discover, enrich, Hunter people pass, score, sync, enrol, classify, pull stats (and learn on Mondays).
+    """Run the whole day: pull the portal into an empty store, discover, enrich, Hunter people pass, score, sync, enrol, classify, pull stats (and learn on Mondays).
 
     Steps whose keys are missing are skipped. Exit code 1 if any step failed.
     """

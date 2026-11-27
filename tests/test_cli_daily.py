@@ -31,7 +31,15 @@ def test_run_steps_isolates_failures():
 
 def _no_keys(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "db_path", tmp_path / "leads.db")
-    for name in ("supabase_url", "supabase_key", "smartlead_api_key", "anthropic_key", "hunter_key"):
+    for name in (
+        "supabase_url",
+        "supabase_key",
+        "portal_proxy_url",
+        "portal_token",
+        "smartlead_api_key",
+        "anthropic_key",
+        "hunter_key",
+    ):
         monkeypatch.setattr(settings, name, "")
 
 
@@ -54,6 +62,7 @@ def test_daily_steps_skip_without_keys(monkeypatch, tmp_path):
     assert rows["score"] == "ok"
     assert rows["enrich --retry-failed"] == "ok"
     for name in (
+        "pull portal",
         "people",
         "sync portal",
         "outreach enroll",

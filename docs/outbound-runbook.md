@@ -77,6 +77,12 @@ then run in chunks such as `leadgen people --limit 500 --max-credits 1500`. Duri
 pattern-guessed owner emails are verified the same way when `HUNTER_API_KEY` is set
 (`LEADGEN_HUNTER_VERIFY=false` turns that off).
 
+`leadgen pull-portal [--since 2026-01-01] [--limit N] [--dry-run]` rebuilds `leads.db` from the
+portal's leads and contacts tables, keeps any local row that is newer than its portal row, and
+marks the pulled rows synced so `sync portal` does not push them straight back. `leadgen daily`
+runs it as its first step whenever the store holds fewer than 50 leads (a fresh runner whose
+Actions cache is empty), so the store never has to be committed to git.
+
 Each step of `leadgen daily` is skipped when its keys are missing and isolated from the others.
 The run ends with a table of ok / skipped / failed steps (also in the job summary) and exits 1 if
 any step failed. The Edge Function handles replies within seconds; the 6-hourly sweep only picks up
