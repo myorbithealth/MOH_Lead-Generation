@@ -261,3 +261,22 @@ Every step-1 email is: greeting, a two or three sentence paragraph written by Cl
   drop it before the next discovery run; store-wide, leads whose platform came only from
   `publicwww:signature` or a seed file should have `competitor_platform` demoted to a hypothesis
   (copy already ignores unconfirmed guesses); follow-up booking links reuse the step-1 UTM tag.
+
+## 2026-11-27 18:25 UTC: first live sends
+
+- Campaigns 4707751 (glp1_competitor, 13 leads) and 4707756 (med_spa_clinic, 1 lead) set to
+  START at 18:25 UTC. First EMAIL_SENT webhooks arrived at 18:32 UTC; Smartlead sends one email
+  per campaign every ~10 min (`min_time_btwn_emails`) across the three mailboxes.
+- Opt-out: `%unsubscribe-text%` was sent literally (test 3b) and the campaign-level
+  `unsubscribe_text` + `add_unsubscribe_tag` added nothing visible (test 2), so the footer uses a
+  reply-based opt-out ("Tell me in a reply and I will not write again"). Test 4 on the empty
+  "other" campaign tries `{{unsubscribe_link}}`, `%unsubscribe-link%`, `%unsubscribe%`,
+  `{{unsubscribe}}` and `{{sl_unsubscribe_link}}` in one body to find a working link tag.
+- Stagger lesson: Smartlead's `resume_lead_with_delay_days` does NOT delay a lead's first step.
+  The three paused second contacts resumed at once; Randy (VitalCore) and Alexis (Skin Clique)
+  went out the same day as their colleagues. Gino (Olive) was paused before his send and a
+  one-shot scheduled task (`trig_01Q5LJz1SrobFjc7rs5SsvoX`, Mon 2026-12-01 09:30 ET) resumes
+  him. For the pipeline: enrol the second contact of a company N days after the first instead
+  of relying on Smartlead delays.
+- Smartlead `DELETE /campaigns/{id}/leads/{lead}` answers a plain "success"; the client now
+  tolerates non-JSON success bodies.
