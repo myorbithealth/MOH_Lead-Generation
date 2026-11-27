@@ -21,7 +21,7 @@ from moh_leadgen.enrich.extract import extract_emails, organization_from_jsonld
 from moh_leadgen.enrich.site_crawler import SiteSnapshot, _parse
 from moh_leadgen.models import Lead, Person
 from moh_leadgen.outreach import enroll as enroll_mod
-from moh_leadgen.outreach.gate import is_sendable, sendable_contacts
+from moh_leadgen.outreach.gate import candidate_contacts, is_sendable, sendable_contacts
 from moh_leadgen.store import LeadStore
 
 
@@ -350,3 +350,25 @@ def test_brand_and_short_boxes_are_roles():
     assert c("inquires@leveluprx.com", None, "leveluprx.com") == "role"
     assert c("randi@myalloy.com", None, "myalloy.com") == "person"
     assert c("zaddy@zaddy.io", "Zaddy Smith", "zaddy.io") == "person"
+
+
+def test_company_name_filed_as_a_person_does_not_make_the_brand_box_a_person():
+    """clearpath@clearpathmetabolic.com with people=[{name: 'ClearPath Metabolic'}] is a role box."""
+    lead = Lead(
+        domain="clearpathmetabolic.com",
+        company_name="ClearPath Metabolic",
+        owner_name="ClearPath Metabolic",
+        people=[Person(name="ClearPath Metabolic", email="clearpath@clearpathmetabolic.com")],
+        emails=["support@clearpathmetabolic.com"],
+    )
+    kinds = {c.email: c.kind for c in candidate_contacts(lead)}
+    assert kinds["clearpath@clearpathmetabolic.com"] == "role"
+    assert kinds["support@clearpathmetabolic.com"] == "role"
+
+    real = Lead(
+        domain="skinclique.com",
+        company_name="Skin Clique",
+        owner_name="Jane Radochonski",
+        people=[Person(name="Jane Radochonski", email="jradochonski@skinclique.com")],
+    )
+    assert {c.email: c.kind for c in candidate_contacts(real)}["jradochonski@skinclique.com"] == "person"

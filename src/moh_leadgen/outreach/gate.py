@@ -30,6 +30,7 @@ Rules (docs/outbound-system-plan.md section 5.5 and 6.1). Reasons are stable sna
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -126,6 +127,24 @@ def _has_corporate_email(lead: Lead) -> bool:
     )
 
 
+def person_name(name: str | None, lead: Lead) -> str | None:
+    """`name` unless it is really the company (extractors sometimes file the brand as a person).
+
+    'ClearPath Metabolic' on clearpathmetabolic.com is not an owner, so clearpath@ there must not
+    pass as that person's mailbox; it is a brand box and is classified like one.
+    """
+    if not name:
+        return None
+    flat = re.sub(r"[^a-z0-9]", "", name.lower())
+    if not flat:
+        return None
+    company = re.sub(r"[^a-z0-9]", "", (lead.company_name or "").lower())
+    brand = email_hygiene._brand_label(lead.domain)
+    if flat == company or (len(brand) >= 4 and flat == brand):
+        return None
+    return name
+
+
 def candidate_contacts(lead: Lead) -> list[Contact]:
     """Every email we know for the lead, best first: owner, named people, then site emails.
 
@@ -135,6 +154,7 @@ def candidate_contacts(lead: Lead) -> list[Contact]:
     seen: set[str] = set()
     out: list[Contact] = []
     corporate = _has_corporate_email(lead)
+    owner_name = person_name(lead.owner_name, lead)
 
     def add(contact: Contact, name: str | None) -> None:
         raw = contact.email.strip().lower()
@@ -144,12 +164,13 @@ def candidate_contacts(lead: Lead) -> list[Contact]:
             return
         seen.add(key)
         contact.email = key
+        name = person_name(name, lead)
         if cleaned is None:
             contact.kind = "junk"
         else:
-            owner_match = matches_owner(key, name) or matches_owner(key, lead.owner_name)
+            owner_match = matches_owner(key, name) or matches_owner(key, owner_name)
             contact.kind = classify_local_part(
-                key, name if matches_owner(key, name) else lead.owner_name, lead.domain
+                key, name if matches_owner(key, name) else owner_name, lead.domain
             )
             if contact.kind == "person" and not owner_match and is_generic_mailbox(key):
                 contact.kind = "role"  # the extractor's wider role pattern (patientsupport@, pr@ ...)
