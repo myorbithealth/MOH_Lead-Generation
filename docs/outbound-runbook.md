@@ -293,3 +293,13 @@ Every step-1 email is: greeting, a two or three sentence paragraph written by Cl
 - A lead added to an already ACTIVE campaign mid-day (TEST 4, 18:26 UTC) sat at STARTED for
   2.5 h without a send; a PAUSED -> START cycle at 21:06 UTC re-kicked the scheduler. If that
   pattern repeats, cycle the campaign status after enrolling into a running campaign.
+- Unsubscribe tags, settled (TEST 4b, 21:32 UTC): `{{unsubscribe_link}}`, `{{unsubscribe}}` and
+  `{{sl_unsubscribe_link}}` render as empty strings (unknown custom fields); `%unsubscribe-link%`
+  and `%unsubscribe%` are sent literally. Smartlead gives API-saved sequences no working link tag,
+  so the footer stays reply-based; opt-out replies are classified and suppressed by the webhook
+  path. A hosted one-click unsubscribe page on the portal is the upgrade if a link is ever wanted.
+- The original TEST 4 lead was orphaned: it was added within a minute of the sequence save and
+  sat at STARTED for three hours (a PAUSED -> START cycle did not help). Deleting it and adding a
+  fresh address sent within four minutes. Rule: save sequences first, add leads after; if a lead
+  stays STARTED past one scheduler cycle, delete and re-add it.
+- The "other" campaign (4707759) is back on the standard sequence, PAUSED, with no leads.
