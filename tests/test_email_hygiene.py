@@ -372,3 +372,24 @@ def test_company_name_filed_as_a_person_does_not_make_the_brand_box_a_person():
         people=[Person(name="Jane Radochonski", email="jradochonski@skinclique.com")],
     )
     assert {c.email: c.kind for c in candidate_contacts(real)}["jradochonski@skinclique.com"] == "person"
+
+    # A solo practice named after its owner keeps the owner as a person.
+    solo = Lead(
+        domain="barbarabaron.com",
+        company_name="Barbara Baron",
+        owner_name="Barbara Baron",
+        people=[Person(name="Barbara Baron", email="barbara@barbarabaron.com")],
+    )
+    assert {c.email: c.kind for c in candidate_contacts(solo)}["barbara@barbarabaron.com"] == "person"
+    titled = Lead(
+        domain="drtonyahartig.com",
+        company_name="Dr Tonya Hartig",
+        people=[Person(name="Dr Tonya Hartig", email="tonya@drtonyahartig.com")],
+    )
+    assert {c.email: c.kind for c in candidate_contacts(titled)}["tonya@drtonyahartig.com"] == "person"
+    one_word_brand = Lead(
+        domain="nutree.com",
+        company_name="Nutree",
+        people=[Person(name="Nutree", email="nutree@nutree.com")],
+    )
+    assert {c.email: c.kind for c in candidate_contacts(one_word_brand)}["nutree@nutree.com"] == "role"
