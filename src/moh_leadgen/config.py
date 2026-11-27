@@ -71,6 +71,41 @@ class Settings:
     respect_robots: bool = field(default_factory=lambda: _env_bool("LEADGEN_RESPECT_ROBOTS", True))
     request_timeout: float = field(default_factory=lambda: float(_env("LEADGEN_TIMEOUT_SECONDS", "20")))
 
+    # Reply side (Builder REPLY): portal anon key for read-only views, Cal.com v2 API key, and the
+    # Claude models for reply classification (cheap, every reply) and weekly variant proposals.
+    supabase_anon_key: str = field(default_factory=lambda: _env("SUPABASE_ANON_KEY"))
+    calcom_api_key: str = field(default_factory=lambda: _env("CALCOM_API_KEY"))
+    classify_model: str = field(default_factory=lambda: _env("LEADGEN_CLASSIFY_MODEL", "claude-haiku-5-5"))
+    classify_escalation_model: str = field(
+        default_factory=lambda: _env("LEADGEN_CLASSIFY_ESCALATION_MODEL", "claude-sonnet-5-5")
+    )
+    learn_model: str = field(default_factory=lambda: _env("LEADGEN_LEARN_MODEL", "claude-opus-5-5"))
+
+    # Enrolment side (Builder ENROL): Smartlead sending platform, the outreach gate and the
+    # compliance footer. The footer values can also come from app_settings 'outreach' in the portal.
+    smartlead_api_key: str = field(default_factory=lambda: _env("SMARTLEAD_API_KEY"))
+    smartlead_base_url: str = field(
+        default_factory=lambda: _env("SMARTLEAD_BASE_URL", "https://server.smartlead.ai/api/v1")
+    )
+    smartlead_webhook_url: str = field(default_factory=lambda: _env("SMARTLEAD_WEBHOOK_URL"))
+    smartlead_webhook_secret: str = field(default_factory=lambda: _env("SMARTLEAD_WEBHOOK_SECRET"))
+    # comma-separated Smartlead email account ids attached to every campaign
+    smartlead_email_account_ids: str = field(default_factory=lambda: _env("SMARTLEAD_EMAIL_ACCOUNT_IDS"))
+    outreach_min_score: int = field(default_factory=lambda: int(_env("LEADGEN_OUTREACH_MIN_SCORE", "50")))
+    # email sends per day that enrolment may commit to (a 4-step contact costs 4)
+    outreach_daily_cap: int = field(default_factory=lambda: int(_env("LEADGEN_OUTREACH_DAILY_CAP", "300")))
+    outreach_timezone: str = field(
+        default_factory=lambda: _env("LEADGEN_OUTREACH_TIMEZONE", "America/New_York")
+    )
+    outreach_sender_name: str = field(default_factory=lambda: _env("LEADGEN_OUTREACH_SENDER_NAME"))
+    outreach_company_legal_name: str = field(
+        default_factory=lambda: _env("LEADGEN_OUTREACH_COMPANY_LEGAL_NAME")
+    )
+    outreach_postal_address: str = field(default_factory=lambda: _env("LEADGEN_OUTREACH_POSTAL_ADDRESS"))
+    personalize_model: str = field(
+        default_factory=lambda: _env("LEADGEN_PERSONALIZE_MODEL", "claude-sonnet-5-5")
+    )
+
     @property
     def has_search_provider(self) -> bool:
         return bool(self.serpapi_key or (self.google_cse_key and self.google_cse_cx) or self.bing_key)
