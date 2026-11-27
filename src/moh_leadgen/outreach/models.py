@@ -13,8 +13,23 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-Segment = Literal["glp1_competitor", "trt_peptides", "med_spa_clinic", "pharmacy_general", "other"]
-SEGMENTS: tuple[str, ...] = ("glp1_competitor", "trt_peptides", "med_spa_clinic", "pharmacy_general", "other")
+Segment = Literal[
+    "glp1_competitor", "trt_peptides", "med_spa_clinic", "pharmacy_general", "other", "fda_compliance"
+]
+SEGMENTS: tuple[str, ...] = (
+    "glp1_competitor",
+    "trt_peptides",
+    "med_spa_clinic",
+    "pharmacy_general",
+    "other",
+    "fda_compliance",
+)
+
+# Leads from the public FDA warning-letter seed list (seeds/public_lists_*.txt). They get the
+# compliance-only 'fda_compliance' campaign, never the price-beat pitch, and are only sendable once a
+# person has reviewed them (source_detail['fda_review'] == 'approved'; see outreach review-list).
+FDA_SEGMENT = "fda_compliance"
+FDA_LIST_VIA_PREFIX = "seedfile:public_lists"
 
 
 class Disposition(StrEnum):

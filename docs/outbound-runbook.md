@@ -120,6 +120,8 @@ leadgen outreach learn --dry-run
 leadgen outreach classify --text "please remove me"   # test the classifier on one reply
 ```
 
+Leads from the FDA warning-letter seed list (`seeds/public_lists_*.txt`) go to the compliance-only `fda_compliance` campaign, never get the price-beat pitch, and the gate rejects them as `fda_list_not_reviewed` until a person has reviewed them. `leadgen outreach review-list [--segment fda_compliance] [--out review.csv]` prints every lead in that segment (domain, company, vertical, score, owner, email, discovered_via) with its current `fda_review` value, and optionally writes the same rows to a CSV. `leadgen outreach review-approve <domain>... [--all-from-file approved.txt] [--reject]` records the decision as `source_detail.fda_review` = `approved` (the lead can then be enrolled) or `rejected` (it never will be).
+
 An agent should prefer `workflow_dispatch` (it uses the repository's secrets and the shared
 `leads.db` cache) and read the job summary table. Do not run `sync-campaigns --start` or raise
 the cap without a person agreeing.

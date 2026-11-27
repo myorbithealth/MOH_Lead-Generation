@@ -30,7 +30,7 @@ from ..enrich.email_hygiene import email_owners, normalize_lead_emails
 from ..models import Lead
 from ..store import LeadStore
 from .gate import USE_DEFAULT_MX, Contact, Suppressions, sendable_contacts
-from .models import PERMANENT_SUPPRESSION_REASONS, Variant
+from .models import FDA_SEGMENT, PERMANENT_SUPPRESSION_REASONS, Variant
 from .personalize import build_custom_fields, get_opener
 from .sequences import (
     CAMPAIGN_KEYS,
@@ -205,7 +205,9 @@ def plan_enrolment(
         if reason or not contacts:
             plan.rejections[reason or "smartlead_skipped"] += 1
             continue
-        key = GENERIC_CAMPAIGN if tier == "generic" else seg
+        # A role mailbox normally gets the 2-step generic campaign, but its copy carries the price
+        # pitch, so an FDA-list lead stays in its compliance-only campaign whatever the tier.
+        key = GENERIC_CAMPAIGN if tier == "generic" and seg != FDA_SEGMENT else seg
         plan.candidates.append(Candidate(lead, seg, key, contacts, tier))
         plan.by_segment[key] += 1
     return plan

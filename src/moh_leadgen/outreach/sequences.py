@@ -11,7 +11,7 @@ split would pick the variant itself, and we could not record it at enrolment.
 
 Copy rules (checked by tests): plain text, step 1 under 150 words and follow-ups under 90 (footer
 excluded), B2B framing, no medical outcome claims, no specific prices (the price-beat guarantee is
-the only money talk), one ask (a 20-minute call via {{booking_link}}), subjects 3-6 lowercase words. The footer is appended to every rendered email.
+the only money talk, and never in 'fda_compliance'), one ask (a 20-minute call via {{booking_link}}), subjects 3-6 lowercase words. The footer is appended to every rendered email.
 
 Unsubscribe: Smartlead's docs name no unsubscribe merge tag, so the opt-out link comes from the
 campaign-level `unsubscribe_text` setting (plus `add_unsubscribe_tag`). The footer also says that
@@ -26,7 +26,7 @@ import uuid
 from dataclasses import dataclass, field
 
 from ..models import Lead
-from .models import SEGMENTS, Variant
+from .models import FDA_LIST_VIA_PREFIX, FDA_SEGMENT, SEGMENTS, Variant
 
 # Stable ids, so the same (segment, step, name) always maps to the same portal variant row.
 VARIANT_NAMESPACE = uuid.UUID("6f0c6a4e-2d55-4b8e-9f1e-4d7a6c0b5e21")
@@ -75,15 +75,26 @@ def lead_platform(lead: Lead) -> str | None:
     return lead.competitor_platform or lead.source_detail.get("platform") or None
 
 
+def is_fda_list_lead(lead: Lead) -> bool:
+    """True for a lead the FDA warning-letter seed list found (first or as a corroborating source)."""
+    vias = [lead.discovered_via or "", *lead.also_found_via]
+    return bool(lead.source_detail.get("fda_list")) or any(v.startswith(FDA_LIST_VIA_PREFIX) for v in vias)
+
+
 def assign_segment(lead: Lead) -> str:
     """Which campaign a lead belongs to. Order matters: the first match wins.
 
+    fda_compliance: anything from the FDA warning-letter seed list, before every other rule. These
+        get compliance-only copy (no price-beat pitch) and need a human review before the gate
+        lets them through.
     glp1_competitor: weight-loss/GLP-1 brands, and peptide brands running on a competitor platform.
     trt_peptides: men's health and peptide/longevity brands without a platform.
     med_spa_clinic: med spas, gyms, primary care, women's health, and Places (local) leads.
     pharmacy_general: online pharmacies, general telehealth, CBD.
     other: everything else (mental health, addiction, unknown vertical).
     """
+    if is_fda_list_lead(lead):
+        return FDA_SEGMENT
     vertical = (lead.vertical or "").lower()
     if vertical.startswith("weight_loss") or ("peptide" in vertical and lead_platform(lead)):
         return "glp1_competitor"
@@ -152,6 +163,8 @@ _PROOF = {
     "whole stack; either way the processor and the data stay yours.",
     "other": "We can run the whole stack, or only the provider and pharmacy layer behind what you "
     "already have; the processor and the data stay yours.",
+    FDA_SEGMENT: "Every patient gets a real consult with a prescriber licensed in their state, and "
+    "orders ship from LegitScript-reviewed partner pharmacies under your brand.",
 }
 
 _GUARANTEE = (
@@ -283,6 +296,57 @@ def _segment_campaign(segment: str) -> CampaignDef:
     return CampaignDef(key=segment, steps=(StepDef(1, 0, _step1_variants(segment)), *_follow_ups(segment)))
 
 
+def _fda_compliance_campaign() -> CampaignDef:
+    """FDA warning-letter list: three steps (day 0, 4, 10), compliance angle only.
+
+    Never the price-beat guarantee, and never a word about the FDA, warning letters or enforcement:
+    the email is about putting the program on solid ground, not about what happened to them.
+    """
+    intro = VariantDef(
+        name="compliance_foundation",
+        angle="compliance_foundation",
+        subject="prescribing and pharmacy setup",
+        body=(
+            "Hi {{first_name}},\n\n{{opener}}\n\n"
+            "The fastest way to put a program on solid ground is a physician network with licensed "
+            "prescribers in every state, LegitScript-reviewed pharmacy partners and proper intake. "
+            "MyOrbit Health runs exactly that under your brand. You keep your storefront, your "
+            "processor and your patient data.\n\n"
+            f"Worth 20 minutes to walk through how it'd look for {{{{company_name}}}}? {{{{booking_link}}}}"
+            f"\n\n{_SIGN_OFF}"
+        ),
+        hypothesis="Operators rebuilding a program want a licensed, reviewed setup more than a lower price.",
+        status="control",
+    )
+    proof = VariantDef(
+        name="compliance_proof",
+        angle="proof",
+        subject="",
+        body=(
+            "Hi {{first_name}},\n\n"
+            f"One concrete thing on how this works for {{{{company_name}}}}: {_PROOF[FDA_SEGMENT]} "
+            "Your storefront and checkout don't change.\n\n"
+            f"Happy to show you the intake and prescriber flow in 20 minutes: {{{{booking_link}}}}\n\n{_SIGN_OFF}"
+        ),
+        hypothesis="A concrete picture of the prescriber and pharmacy flow earns the reply.",
+    )
+    close = VariantDef(
+        name="compliance_close",
+        angle="close_loop",
+        subject="",
+        body=(
+            "Hi {{first_name}},\n\n"
+            "Last note from me. If getting prescribing and pharmacy on a licensed, reviewed footing is "
+            "on your list this quarter, we can run it behind {{company_name}} without a rebuild.\n\n"
+            f"Twenty minutes is all it takes: {{{{booking_link}}}}\n\n{_SIGN_OFF}"
+        ),
+        hypothesis="A short last note gets the 'not now, but later' replies.",
+    )
+    return CampaignDef(
+        key=FDA_SEGMENT, steps=(StepDef(1, 0, (intro,)), StepDef(2, 4, (proof,)), StepDef(3, 10, (close,)))
+    )
+
+
 def _generic_campaign() -> CampaignDef:
     """Role mailboxes: two steps (day 0, day 5), addressed to the business, asks for a referral."""
     intro = VariantDef(
@@ -316,7 +380,8 @@ def _generic_campaign() -> CampaignDef:
 
 
 CAMPAIGNS: dict[str, CampaignDef] = {
-    **{segment: _segment_campaign(segment) for segment in SEGMENTS},
+    **{segment: _segment_campaign(segment) for segment in SEGMENTS if segment != FDA_SEGMENT},
+    FDA_SEGMENT: _fda_compliance_campaign(),
     GENERIC_CAMPAIGN: _generic_campaign(),
 }
 

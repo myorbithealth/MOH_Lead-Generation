@@ -4,7 +4,10 @@ Rules (docs/outbound-system-plan.md section 5.5 and 6.1). Reasons are stable sna
   lead-level   already_enrolled; suppressed_local; platform_owned_domain (a competitor platform's own
                domain); not_enriched (no pages crawled); low_score (< settings.outreach_min_score);
                no_mx (lead.has_mx is False); portal_status_<status> (only new / reviewed pass);
-               suppressed_domain.
+               suppressed_domain; fda_list_not_reviewed (a lead in the 'fda_compliance' segment, i.e.
+               from the FDA warning-letter seed list, until a person sets source_detail['fda_review']
+               to 'approved' with `leadgen outreach review-approve`; checked after the other
+               lead-level rules, so its count is the FDA-list leads waiting only on review).
   contact      every address is first cleaned (enrich.email_hygiene.clean_email: mailto:, %20,
                u003e / &gt; escapes, query strings) and classified person / role / junk:
                suppressed_email, suppressed_domain;
@@ -45,7 +48,9 @@ from ..enrich.email_hygiene import (
 from ..enrich.extract import is_generic_mailbox
 from ..models import Lead
 from ..tools.competitor_platform import PLATFORM_OWNED
+from .models import FDA_SEGMENT
 from .personalize import first_name_from, last_name_from
+from .sequences import assign_segment
 
 MxCheck = Callable[[str], "bool | None"]
 # The MX lookup used when a caller does not pass mx_check. Tests swap it for an offline fake.
@@ -56,6 +61,7 @@ SENDABLE_EMAIL_STATUSES = {"verified", "provider", "on_site"}
 ALLOWED_GENERIC_LOCALPARTS = ("info", "hello", "contact", "support", "admin", "office")
 SENDABLE_PORTAL_STATUSES = {"new", "reviewed"}
 MAX_CONTACTS_PER_COMPANY = 2
+FDA_REVIEW_APPROVED = "approved"
 
 
 @dataclass
@@ -219,6 +225,8 @@ def lead_rejection(
         return f"portal_status_{status}"
     if suppressions and suppressions.domain_blocked(lead.domain):
         return "suppressed_domain"
+    if assign_segment(lead) == FDA_SEGMENT and lead.source_detail.get("fda_review") != FDA_REVIEW_APPROVED:
+        return "fda_list_not_reviewed"
     return None
 
 

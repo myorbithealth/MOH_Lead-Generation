@@ -14,7 +14,7 @@ from pathlib import Path
 
 from .enrich.tech import canonical_platform, platform_spellings
 from .models import Candidate, Lead
-from .outreach.models import OutreachState
+from .outreach.models import FDA_LIST_VIA_PREFIX, OutreachState
 
 _SCHEMA = """
 create table if not exists leads (
@@ -169,9 +169,14 @@ class LeadStore:
         detail = dict(cand.source_detail)
         if detail.get("platform"):
             detail["platform"] = canonical_platform(detail["platform"])
+        fda_list = (cand.discovered_via or "").startswith(FDA_LIST_VIA_PREFIX)
+        if fda_list:
+            detail["fda_list"] = True  # FDA warning-letter seed: compliance-only copy, human review first
         existing = self.get(cand.domain)
         if existing:
-            self._corroborate(existing, cand.discovered_via)
+            if fda_list:
+                existing.source_detail["fda_list"] = True
+            self._corroborate(existing, cand.discovered_via, force=fda_list)
             return False
         lead = Lead(
             domain=cand.domain,
@@ -183,10 +188,14 @@ class LeadStore:
         self.save(lead)
         return True
 
-    def _corroborate(self, lead: Lead, via: str) -> None:
-        if not via or via == lead.discovered_via or via in lead.also_found_via:
+    def _corroborate(self, lead: Lead, via: str, *, force: bool = False) -> None:
+        """Record `via` in also_found_via. `force` writes the row even when via is already known
+        (the caller changed source_detail too)."""
+        known = not via or via == lead.discovered_via or via in lead.also_found_via
+        if known and not force:
             return
-        lead.also_found_via.append(via)
+        if not known:
+            lead.also_found_via.append(via)
         # Write the JSON only: also_found_via is local evidence, so it should not mark the row
         # as changed for the portal sync.
         self.conn.execute("update leads set data=? where domain=?", (lead.model_dump_json(), lead.domain))

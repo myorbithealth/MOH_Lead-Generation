@@ -126,7 +126,7 @@ def test_variant_rows_have_stable_unique_ids():
     rows = all_variants()
     assert len({r.id for r in rows}) == len(rows)
     assert {r.id for r in rows} == {r.id for r in all_variants()}
-    assert sum(1 for r in rows if r.status == "control") == 6  # one per campaign
+    assert sum(1 for r in rows if r.status == "control") == 7  # one per campaign
 
 
 def test_render_drops_the_name_but_keeps_the_greeting():
@@ -537,6 +537,7 @@ def test_sync_campaigns_dry_run_payload_shape(settings_env):
         "med_spa_clinic",
         "pharmacy_general",
         "other",
+        "fda_compliance",
         "generic",
     }
     p = report["campaigns"]["glp1_competitor"]
@@ -557,7 +558,7 @@ def test_sync_campaigns_creates_once_and_records_ids(settings_env, tmp_path):
     enroll_mod.sync_campaigns(client, sink, state_path=state_path, daily_cap=300)
     enroll_mod.sync_campaigns(client, sink, state_path=state_path, daily_cap=300)
 
-    assert len(fake.campaigns) == 6  # second run found them, created nothing
+    assert len(fake.campaigns) == 7  # second run found them, created nothing
     state = json.loads(state_path.read_text())
     assert state["campaigns"]["other"]["id"] in fake.campaigns
     assert "s1_control" in state["campaigns"]["other"]["variants"]

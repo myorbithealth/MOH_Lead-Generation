@@ -127,6 +127,14 @@ def facts_hash(facts: dict[str, str]) -> str:
 def template_opener(facts: dict[str, str]) -> str:
     """Deterministic fallback (no model call). Plain, specific, no AI filler."""
     company = facts["company"]
+    if facts.get("angle") == COMPLIANCE_ANGLE:
+        what = facts.get("vertical") or "prescription programs"
+        where = f" on {facts['platform']}" if facts.get("platform") else ""
+        return (
+            f"{company} runs {what} online{where}. Who prescribes, in which states, and which pharmacy "
+            "fills each order is the hardest part of a program like that to get right, and it's the "
+            "part we run."
+        )
     bits = []
     if facts.get("platform"):
         bits.append(
@@ -149,7 +157,16 @@ def template_opener(facts: dict[str, str]) -> str:
     return " ".join(bits)
 
 
-def _valid_opener(text: str) -> bool:
+# The compliance-only angle (FDA warning-letter leads) must never name regulators or the price pitch.
+COMPLIANCE_ANGLE = "compliance_foundation"
+_COMPLIANCE_BANNED = re.compile(
+    r"\b(fda|warning|enforcement|regulators?|regulatory action|crack\w*|beat\w*)\b", re.IGNORECASE
+)
+
+
+def _valid_opener(text: str, angle: str | None = None) -> bool:
+    if angle == COMPLIANCE_ANGLE and _COMPLIANCE_BANNED.search(text):
+        return False
     words = len(text.split())
     if not (20 <= words <= OPENER_MAX_WORDS) or "\n" in text:
         return False
@@ -167,6 +184,8 @@ _ANGLE_HINTS = {
     "refills stay, and one physician fee instead of one per medication",
     "plain": "state plainly what we would change for them",
     "referral_ask": "write for a shared inbox: who at the company this is for, and why",
+    COMPLIANCE_ANGLE: "build toward how they prescribe and fulfil today and what a licensed, "
+    "LegitScript-reviewed setup would change, without mentioning regulators or enforcement",
 }
 
 
@@ -218,7 +237,7 @@ def claude_opener(facts: dict[str, str], client: Any, model: str | None = None) 
         opener = str(json.loads(text)["opener"]).strip()
     except (ValueError, KeyError, TypeError):
         return None
-    return opener if _valid_opener(opener) else None
+    return opener if _valid_opener(opener, facts.get("angle")) else None
 
 
 def default_client() -> Any | None:

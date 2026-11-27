@@ -1,17 +1,23 @@
-"""Enrolment-side commands: plan, enroll, sync-campaigns, pull-stats, suppress."""
+"""Enrolment-side commands: plan, enroll, sync-campaigns, pull-stats, suppress, review-list/approve."""
 
 from __future__ import annotations
 
+import csv
 import json
 import random
+from datetime import UTC, datetime
+from pathlib import Path
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from ..config import settings
+from ..domains import normalize_domain
+from ..models import Lead
 from ..store import LeadStore
 from .cli import outreach_app
+from .models import FDA_SEGMENT
 
 console = Console()
 
@@ -147,3 +153,113 @@ def suppress_cmd(
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
     console.print(f"outreach suppress: {out}")
+
+
+# ------------------------------------------------------------------ human review (FDA-list leads)
+REVIEW_COLUMNS = (
+    "domain",
+    "company",
+    "vertical",
+    "score",
+    "owner",
+    "email",
+    "discovered_via",
+    "fda_review",
+)
+
+
+def _review_row(lead: Lead) -> dict[str, str]:
+    email = lead.owner_email or lead.primary_email or next(iter(lead.emails), None)
+    return {
+        "domain": lead.domain,
+        "company": lead.company_name or "",
+        "vertical": lead.vertical or "",
+        "score": str(lead.score),
+        "owner": lead.owner_name or "",
+        "email": email or "",
+        "discovered_via": lead.discovered_via or "",
+        "fda_review": str(lead.source_detail.get("fda_review") or "pending"),
+    }
+
+
+def review_rows(store: LeadStore, segment: str = FDA_SEGMENT) -> list[dict[str, str]]:
+    """One row per lead in `segment`, best score first, with its current fda_review value."""
+    from .sequences import assign_segment
+
+    leads = [lead for lead in store.iter() if assign_segment(lead) == segment]
+    leads.sort(key=lambda lead: (-lead.score, lead.domain))
+    return [_review_row(lead) for lead in leads]
+
+
+def set_review(store: LeadStore, domains: list[str], decision: str) -> dict[str, list[str]]:
+    """Set source_detail['fda_review'] = decision on each FDA-list lead and save it.
+
+    Returns {'updated': [...], 'not_found': [...], 'not_fda_list': [...]}; leads outside the
+    fda_compliance segment are left untouched (they need no review).
+    """
+    from .sequences import assign_segment
+
+    out: dict[str, list[str]] = {"updated": [], "not_found": [], "not_fda_list": []}
+    now = datetime.now(UTC).isoformat()
+    for raw in domains:
+        domain = normalize_domain(raw) or raw.strip().lower()
+        lead = store.get(domain)
+        if lead is None:
+            out["not_found"].append(domain)
+            continue
+        if assign_segment(lead) != FDA_SEGMENT:
+            out["not_fda_list"].append(domain)
+            continue
+        lead.source_detail["fda_review"] = decision
+        lead.source_detail["fda_review_at"] = now
+        store.save(lead)
+        out["updated"].append(domain)
+    return out
+
+
+def _domains_from_file(path: Path) -> list[str]:
+    """One domain per line; '#' starts a comment (the seeds/ format)."""
+    lines = (raw.split("#", 1)[0].strip() for raw in path.read_text(encoding="utf-8").splitlines())
+    return [line.split(",", 1)[0].strip() for line in lines if line]
+
+
+@outreach_app.command("review-list")
+def review_list_cmd(
+    segment: str = typer.Option(FDA_SEGMENT, help="Segment to review"),
+    out: Path | None = typer.Option(None, "--out", help="Also write the rows to this CSV file"),
+):
+    """Every lead in the segment with its fda_review value (pending / approved / rejected)."""
+    rows = review_rows(_store(), segment)
+    table = Table(*REVIEW_COLUMNS)
+    for row in rows:
+        table.add_row(*(row[c] for c in REVIEW_COLUMNS))
+    console.print(table)
+    if out is not None:
+        with out.open("w", newline="", encoding="utf-8") as fh:
+            writer = csv.DictWriter(fh, fieldnames=REVIEW_COLUMNS)
+            writer.writeheader()
+            writer.writerows(rows)
+    counts = {k: sum(1 for r in rows if r["fda_review"] == k) for k in ("pending", "approved", "rejected")}
+    console.print(f"outreach review-list: {len(rows)} leads in {segment}, {counts}")
+
+
+@outreach_app.command("review-approve")
+def review_approve_cmd(
+    domains: list[str] = typer.Argument(None, help="Domains to approve (or reject)"),
+    all_from_file: Path | None = typer.Option(
+        None, "--all-from-file", help="Also every domain in this file (one per line, '#' comments)"
+    ),
+    reject: bool = typer.Option(False, "--reject", help="Mark them rejected instead of approved"),
+):
+    """Record the human review of FDA-list leads: approved leads pass the gate, rejected never do."""
+    targets = list(domains or [])
+    if all_from_file is not None:
+        targets += _domains_from_file(all_from_file)
+    if not targets:
+        raise typer.BadParameter("give at least one domain or --all-from-file")
+    decision = "rejected" if reject else "approved"
+    result = set_review(_store(), targets, decision)
+    console.print(
+        f"outreach review-approve: {decision} {len(result['updated'])}, "
+        f"not found {result['not_found']}, not on the FDA list {result['not_fda_list']}"
+    )
