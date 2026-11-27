@@ -21,8 +21,8 @@ on:
         description: "Smartlead sends enrolment may commit to today (empty = portal/env default)"
         default: ""
       enroll:
-        description: "Enrol into Smartlead (true/false)"
-        default: "true"
+        description: "Enrol into Smartlead (true/false); scheduled runs follow the LEADGEN_ENROLL repo variable"
+        default: "false"
       classify:
         description: "Classify replies (true/false)"
         default: "true"
@@ -95,7 +95,8 @@ jobs:
           ARGS=(--discover-limit "$DL" --enrich-limit "$EL")
           CAP="${{ github.event.inputs.daily_cap }}"
           [ -n "$CAP" ] && ARGS+=(--daily-cap "$CAP")
-          [ "${{ github.event.inputs.enroll || 'true' }}" = "false" ] && ARGS+=(--no-enroll)
+          # enrolment is off unless the run asks for it or the repo variable LEADGEN_ENROLL is "true"
+          [ "${{ github.event.inputs.enroll || vars.LEADGEN_ENROLL || 'false' }}" = "false" ] && ARGS+=(--no-enroll)
           [ "${{ github.event.inputs.classify || 'true' }}" = "false" ] && ARGS+=(--no-classify)
           leadgen daily "${ARGS[@]}" 2>&1 | tee daily.log
           exit "${PIPESTATUS[0]}"
