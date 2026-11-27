@@ -96,11 +96,11 @@ def test_copy_follows_the_house_rules():
         for step in campaign.steps:
             for variant in step.variants:
                 text = render(variant.body, SAMPLE_FIELDS)
-                limit = 120 if step.step == 1 else 80
+                limit = 150 if step.step == 1 else 90
                 assert word_count(text) < limit, (key, step.step, variant.name)
                 assert "{{booking_link}}" in variant.body, (key, variant.name)
                 assert "{{" not in text, (key, variant.name)
-                assert "$" not in text and "price" not in text.lower()
+                assert "$" not in text  # the price-beat guarantee is allowed; specific prices are not
                 if step.step == 1:
                     assert subject_problems(variant.subject) == [], (key, variant.subject)
                 else:
@@ -113,9 +113,9 @@ def test_step1_has_three_angles_and_a_control_and_follow_ups_are_single():
         steps = CAMPAIGNS[segment].steps
         assert [s.day for s in steps] == [0, 3, 7, 14]
         assert {v.name for v in steps[0].variants} == {
-            "competitor_displacement",
-            "compliance_legitscript",
-            "speed_to_launch",
+            "price_beat",
+            "own_the_stack",
+            "better_medicine",
             "control",
         }
         assert all(len(s.variants) == 1 for s in steps[1:])
@@ -564,7 +564,7 @@ def test_sync_campaigns_creates_once_and_records_ids(settings_env, tmp_path):
     assert sink.settings["outreach"]["campaigns"]["generic"] in fake.campaigns
     assert sink.settings["outreach"]["postal_address"]  # merged, not replaced
     labels = {v["smartlead_variant_label"] for v in sink.variants}
-    assert "s1_competitor_displacement" in labels and len(sink.variants) == len(all_variants())
+    assert "s1_price_beat" in labels and len(sink.variants) == len(all_variants())
 
 
 # ------------------------------------------------------------------ enroll

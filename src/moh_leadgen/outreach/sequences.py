@@ -9,9 +9,9 @@ fields. That gives per-lead variant choice (Thompson sampling, a control floor) 
 per segment, and the variant a lead got on day 0 is the one it gets on day 14. Smartlead's own A/B
 split would pick the variant itself, and we could not record it at enrolment.
 
-Copy rules (checked by tests): plain text, step 1 under 120 words and follow-ups under 80 (footer
-excluded), B2B framing, no medical claims, no pricing, one ask (a 20-minute demo via
-{{booking_link}}), subjects 3-6 lowercase words. The footer is appended to every rendered email.
+Copy rules (checked by tests): plain text, step 1 under 150 words and follow-ups under 90 (footer
+excluded), B2B framing, no medical outcome claims, no specific prices (the price-beat guarantee is
+the only money talk), one ask (a 20-minute call via {{booking_link}}), subjects 3-6 lowercase words. The footer is appended to every rendered email.
 
 Unsubscribe: Smartlead's docs name no unsubscribe merge tag, so the opt-out link comes from the
 campaign-level `unsubscribe_text` setting (plus `add_unsubscribe_tag`). The footer also says that
@@ -137,66 +137,76 @@ class CampaignDef:
         return len(self.steps)
 
 
-# One proof line per segment: step 1 (speed/displacement angles) and step 2 reuse it.
+# The pitch, per the founder: beat what they pay today for consults and for medication, or we
+# integrate their current pharmacy for them; they own the processor and the data; no markup on
+# medication; we are a physician network that does the consults; patients get multiple refills;
+# everything is customisable. One proof line per segment colours the ask.
 _PROOF = {
-    "glp1_competitor": "You keep your storefront, pricing and patient list; we run providers, "
-    "pharmacy and intake behind it.",
-    "trt_peptides": "Our providers handle consults and follow-ups for ongoing programs, and partner "
-    "pharmacies ship under your brand.",
-    "med_spa_clinic": "It lets a clinic or gym offer telehealth programs without hiring prescribers "
-    "or setting up a pharmacy.",
-    "pharmacy_general": "It can sit behind an existing brand as the provider and intake layer, or run "
-    "the whole stack.",
-    "other": "It can run the whole stack, or just the provider and pharmacy layer behind what you "
-    "already have.",
+    "glp1_competitor": "You keep your storefront, pricing and patient list; our physician network runs "
+    "consults, refills and pharmacy fulfilment behind it, with no markup on the medication.",
+    "trt_peptides": "Our physician network runs consults and ongoing refills, and partner pharmacies "
+    "ship under your brand with no markup on the medication.",
+    "med_spa_clinic": "A clinic or gym can offer prescription programs without hiring prescribers or "
+    "setting up a pharmacy, and keeps the patient relationship.",
+    "pharmacy_general": "We can sit behind your brand as the provider and intake layer, or run the "
+    "whole stack; either way the processor and the data stay yours.",
+    "other": "We can run the whole stack, or only the provider and pharmacy layer behind what you "
+    "already have; the processor and the data stay yours.",
 }
 
+_GUARANTEE = (
+    "Our offer is simple: whatever you pay today for consults and for medication, we will beat it. "
+    "If we cannot, we will integrate your current pharmacy for you at no charge."
+)
+_OWN = "You own the payment processor and your patient data. We never mark up the medication."
+
 _SIGN_OFF = "{{sender_name}}"
-_ASK_DEMO = "Worth a 20-minute demo? Here is my calendar: {{booking_link}}"
+_ASK_DEMO = "Worth 20 minutes to check the numbers? Here is my calendar: {{booking_link}}"
 
 
 def _step1_variants(segment: str) -> tuple[VariantDef, ...]:
     proof = _PROOF[segment]
     return (
         VariantDef(
-            name="competitor_displacement",
-            angle="competitor_displacement",
-            subject="question about {{platform}}",
+            name="price_beat",
+            angle="price_beat_guarantee",
+            subject="your {{platform}} pricing",
             body=(
                 "Hi {{first_name}},\n\n{{opener}}\n\n"
-                "If you have ever wanted more control over providers, pharmacy and margin than "
-                "{{platform}} gives you, that is the gap MyOrbit Health fills: white-label telehealth "
-                f"infrastructure for {{{{vertical_phrase}}}}. {proof}\n\n"
+                f"{_GUARANTEE} MyOrbit Health is white-label telehealth infrastructure for "
+                f"{{{{vertical_phrase}}}}: a physician network that does the consults, pharmacy "
+                "fulfilment, intake and checkout, all under your brand and fully customisable.\n\n"
                 f"{_ASK_DEMO}\n\n{_SIGN_OFF}"
             ),
-            hypothesis="Naming the platform they already use makes the offer concrete.",
+            hypothesis="A price-beat guarantee on consults and meds is the sharpest reason to take a call.",
         ),
         VariantDef(
-            name="compliance_legitscript",
-            angle="compliance_legitscript",
-            subject="legitscript and pharmacy partners",
+            name="own_the_stack",
+            angle="ownership_no_markup",
+            subject="who owns your patient data",
             body=(
                 "Hi {{first_name}},\n\n{{opener}}\n\n"
-                "LegitScript and payment processors look closely at who your prescribers and pharmacy "
-                "are. MyOrbit Health gives {{vertical_phrase}} a white-label provider network, pharmacy "
-                "fulfilment and checkout set up with that review in mind, so your team can stay on the "
-                "brand.\n\n"
-                f"Open to a 20-minute demo? Pick a time here: {{{{booking_link}}}}\n\n{_SIGN_OFF}"
+                "Most platforms sit between you and your patients: their processor, their data, a "
+                f"margin on every order. MyOrbit Health is built the other way round. {_OWN} {proof}\n\n"
+                f"{_GUARANTEE}\n\n"
+                f"Open to a 20-minute look at the numbers? {{{{booking_link}}}}\n\n{_SIGN_OFF}"
             ),
-            hypothesis="Compliance worry is a sharper pain than cost for regulated DTC brands.",
+            hypothesis="Ownership of processor and data is the pain that makes operators switch.",
         ),
         VariantDef(
-            name="speed_to_launch",
-            angle="speed_to_launch",
-            subject="launch time for new programs",
+            name="better_medicine",
+            angle="clinical_quality_refills",
+            subject="consults, refills and margin",
             body=(
                 "Hi {{first_name}},\n\n{{opener}}\n\n"
-                "Adding a new program can take months of finding providers, a pharmacy and a checkout "
-                "that work together. MyOrbit Health is that stack, white-labelled: providers, pharmacy "
-                f"fulfilment, intake and payments under the {{{{company_name}}}} name. {proof}\n\n"
-                f"Would a 20-minute demo be useful? {{{{booking_link}}}}\n\n{_SIGN_OFF}"
+                "Two things most {{vertical_phrase}} tell us: patients churn when refills are a fight, "
+                "and the platform takes a cut of every consult and every order. Our physician network "
+                "does real consults, gives patients multiple refills, and charges no markup on the "
+                "medication; everything from intake to pricing is customisable.\n\n"
+                f"{_GUARANTEE}\n\n"
+                f"Worth a 20-minute call? {{{{booking_link}}}}\n\n{_SIGN_OFF}"
             ),
-            hypothesis="Time to launch matters more than switching cost for growing brands.",
+            hypothesis="Clinical quality plus refills speaks to operators who care about retention.",
         ),
         VariantDef(
             name="control",
@@ -204,11 +214,12 @@ def _step1_variants(segment: str) -> tuple[VariantDef, ...]:
             subject="white-label telehealth for {{company_name}}",
             body=(
                 "Hi {{first_name}},\n\n{{opener}}\n\n"
-                "MyOrbit Health runs the telehealth back end for {{vertical_phrase}}: licensed "
-                "providers, pharmacy fulfilment, intake and checkout, all under your brand.\n\n"
+                "MyOrbit Health runs the telehealth back end for {{vertical_phrase}}: a physician "
+                "network for consults, pharmacy fulfilment, intake and checkout, all under your brand. "
+                f"{_GUARANTEE}\n\n"
                 f"Could I show you how it works in a 20-minute demo? {{{{booking_link}}}}\n\n{_SIGN_OFF}"
             ),
-            hypothesis="Plain description; the baseline every angle is measured against.",
+            hypothesis="Plain description with the guarantee; the baseline every angle is measured against.",
             status="control",
         ),
     )
@@ -228,9 +239,10 @@ def _follow_ups(segment: str) -> tuple[StepDef, ...]:
                     body=(
                         "Hi {{first_name}},\n\n"
                         f"One specific on how this would work for {{{{company_name}}}}: {proof}\n\n"
-                        f"If it is worth a look, here is a 20-minute slot: {{{{booking_link}}}}\n\n{_SIGN_OFF}"
+                        "Bring your current per-consult and per-order costs to the call and we will "
+                        f"show you the comparison live: {{{{booking_link}}}}\n\n{_SIGN_OFF}"
                     ),
-                    hypothesis="A concrete how-it-works line earns replies the opener missed.",
+                    hypothesis="A concrete how-it-works line plus a live comparison earns replies.",
                 ),
             ),
         ),
@@ -244,12 +256,12 @@ def _follow_ups(segment: str) -> tuple[StepDef, ...]:
                     subject="",
                     body=(
                         "Hi {{first_name}},\n\n"
-                        "A different way to look at it: instead of separate contracts for prescribers, a "
-                        "pharmacy and a payment processor, {{company_name}} would work with one partner "
-                        "and one point of contact.\n\n"
+                        "A different way to look at it: instead of a platform fee, a processor you do "
+                        "not control and a markup on every order, {{company_name}} would work with one "
+                        f"physician network and keep the processor, the data and the margin. {_OWN}\n\n"
                         f"Happy to walk through it in 20 minutes: {{{{booking_link}}}}\n\n{_SIGN_OFF}"
                     ),
-                    hypothesis="Vendor consolidation lands with operators who skipped the first angle.",
+                    hypothesis="Vendor consolidation and ownership land with operators who skipped the first angle.",
                 ),
             ),
         ),
@@ -263,11 +275,12 @@ def _follow_ups(segment: str) -> tuple[StepDef, ...]:
                     subject="",
                     body=(
                         "Hi {{first_name}},\n\n"
-                        "I will stop here so I do not clutter your inbox. If white-label telehealth "
-                        "infrastructure becomes a priority for {{company_name}}, a 20-minute demo is "
-                        f"one click away: {{{{booking_link}}}}\n\n{_SIGN_OFF}"
+                        "I will stop here so I do not clutter your inbox. The guarantee stands: if we "
+                        "cannot beat what {{company_name}} pays for consults and medication, we will "
+                        "integrate your pharmacy for you at no charge. A 20-minute call is one click "
+                        f"away: {{{{booking_link}}}}\n\n{_SIGN_OFF}"
                     ),
-                    hypothesis="A polite last note gets the 'not now, but later' replies.",
+                    hypothesis="A polite last note with the guarantee gets the 'not now, but later' replies.",
                 ),
             ),
         ),
@@ -287,8 +300,10 @@ def _generic_campaign() -> CampaignDef:
         body=(
             "Hi {{company_name}} team,\n\n{{opener}}\n\n"
             "Could you point me to whoever looks after partnerships or operations? MyOrbit Health is "
-            "white-label telehealth infrastructure for {{vertical_phrase}}: licensed providers, pharmacy "
-            "fulfilment, intake and checkout under your brand.\n\n"
+            "white-label telehealth infrastructure for {{vertical_phrase}}: a physician network for "
+            "consults, pharmacy fulfilment with no markup on medication, intake and checkout under your "
+            "brand. We beat what you pay today for consults and medication, or we integrate your "
+            "pharmacy for you.\n\n"
             f"If it is easier, they can book a 20-minute demo directly: {{{{booking_link}}}}\n\n{_SIGN_OFF}"
         ),
         hypothesis="A shared inbox forwards a short, specific referral ask.",
