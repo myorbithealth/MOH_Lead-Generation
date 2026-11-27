@@ -198,3 +198,30 @@ Every step-1 email is: greeting, a two or three sentence paragraph written by Cl
     those are role mailboxes now. Short first-name prefixes (`chris@christinemedspa.com`) stay people.
 - The portal `variants` table is still empty: `sync-campaigns` fills it (the scheduled task runs
   that before enrolling). Once rows exist the portal copy wins over the built-in one.
+
+## 2026-11-27 17:19 UTC: mailboxes delivered, first enrolment loaded
+
+- Order `SS-3639018916019-681950-30` delivered three pre-warmed Google mailboxes on
+  `heathstrategy.co` (Smartlead ids 27161838 paul@, 27161830 weston@, 27161828 grant@), each
+  15/day as delivered. Configured via the API: from_name "Shubh Dhruv", 20 sends/day, 12 min
+  between sends, signature "Shubh Dhruv / Founder, MyOrbit Health / myorbithealth.com", warm-up
+  on at 20/day with no ramp (pre-warmed), attached to all seven "MOH outbound" campaigns.
+  `SMARTLEAD_EMAIL_ACCOUNT_IDS=27161838,27161830,27161828` is in `.env`; set the same GitHub
+  variable before the daily run is allowed to enrol.
+- Known trade-off: the local parts are personas (paul@, weston@, grant@) under a domain that is
+  not ours, with "Shubh Dhruv" as the display name. The brand-variant domains replace these as
+  soon as Smartlead enables API purchases or they are bought in the UI.
+- First real enrolment (`outreach enroll --daily-cap 60 --seed 7`): 15 named contacts at 11
+  companies, 11 Claude openers, into campaigns 4707751 (glp1_competitor, 14 leads) and 4707756
+  (med_spa_clinic, 1 lead). Campaigns were left DRAFTED on purpose: nothing sends until START.
+- Bug found on the way: `cli_enroll._sink()` only recognised the service-key settings, so
+  sync-campaigns and enroll had run local-only (portal variants 0, no drafts). Fixed, and the
+  pending rows were pushed with `retry_pending_portal_rows`: portal now has 40 variants, 11
+  enrolled leads, 15 queued step-1 drafts, 15 contacts with Smartlead ids.
+- Pre-send checks before START: (1) an Opus review panel fact-checks every rendered email against
+  the company's website and the copy rules (workflow `pre-send-email-review`); (2) an end-to-end
+  test lead (shubh@myorbithealth.com) in the otherwise empty "other" campaign 4707759, which was
+  STARTed at 17:25 UTC to see the rendered plain-text email, the unsubscribe link, and the
+  EMAIL_SENT webhook in the portal. Remove the test lead (or pause that campaign) after step 1.
+- The 4-hourly delivery check `trig_01Rd6GC8DjhwQN3aunqtE5C4` is disabled (it would have
+  enrolled a second batch).
