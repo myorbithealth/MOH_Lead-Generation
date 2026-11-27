@@ -280,3 +280,16 @@ Every step-1 email is: greeting, a two or three sentence paragraph written by Cl
   of relying on Smartlead delays.
 - Smartlead `DELETE /campaigns/{id}/leads/{lead}` answers a plain "success"; the client now
   tolerates non-JSON success bodies.
+
+## 2026-11-27 21:05 UTC: day 1 closed
+
+- All 13 step-1 emails went out between 18:32 and 21:04 UTC (last three: Atara/Nutree 20:12,
+  Wade/Cache Medical 20:31, Tara/Rose MedSpa 21:04). Mailbox split for the day: Grant 10,
+  Weston 4, Paul 2 (of 20 each; includes the three test sends). No bounces, opens, clicks or
+  replies by 21:05 UTC. Smartlead: glp1 12 in progress + Gino paused, med_spa 1 in progress.
+  Portal `email_drafts`: 16 step-1 sent (13 live + 3 tests), Gino queued, Brynne send_failed.
+- Step 2 is due from Mon 2026-12-01 (day +4) inside the 08:00-17:00 ET window; Gino's step 1
+  resumes the same morning via the one-shot scheduled task.
+- A lead added to an already ACTIVE campaign mid-day (TEST 4, 18:26 UTC) sat at STARTED for
+  2.5 h without a send; a PAUSED -> START cycle at 21:06 UTC re-kicked the scheduler. If that
+  pattern repeats, cycle the campaign status after enrolling into a running campaign.
