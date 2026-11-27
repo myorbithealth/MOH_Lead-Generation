@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Any
 
@@ -125,6 +126,43 @@ class SupabaseSink:
             r = self.client.get("/leads", params={"select": "domain,status", "domain": f"in.({chunk})"})
             if r.status_code == 200:
                 out.update({row["domain"]: row["status"] for row in r.json()})
+        return out
+
+    def fetch_leads(self, since: datetime | None = None, page_size: int = 500) -> Iterator[dict]:
+        """Every public.leads row (select=*), paged by limit/offset in domain order.
+
+        `since` adds updated_at=gte.<iso> when the table has that column (probed with one row,
+        since an unknown column in a filter is a 400). Paging stops at the first short page.
+        """
+        params: dict[str, Any] = {"select": "*", "order": "domain.asc"}
+        if since is not None:
+            if since.tzinfo is None:
+                since = since.replace(tzinfo=UTC)
+            probe = self._get("/leads", {"select": "*", "limit": 1})
+            if probe and "updated_at" in probe[0]:
+                params["updated_at"] = f"gte.{since.isoformat()}"
+            elif probe:
+                log.warning("leads has no updated_at column; ignoring since=%s", since.isoformat())
+        offset = 0
+        while True:
+            rows = self._get("/leads", {**params, "limit": page_size, "offset": offset})
+            yield from rows
+            if len(rows) < page_size:
+                return
+            offset += page_size
+
+    def fetch_contacts_for(self, domains: list[str]) -> dict[str, list[dict]]:
+        """public.contacts rows grouped by lead_domain, queried in chunks of IN_CHUNK domains."""
+        out: dict[str, list[dict]] = {}
+        wanted = sorted({d for d in domains if d})
+        for i in range(0, len(wanted), IN_CHUNK):
+            rows = self._get_all(
+                "/contacts",
+                {"select": "*", "order": "id.asc", "lead_domain": _in(wanted[i : i + IN_CHUNK])},
+            )
+            for row in rows:
+                if row.get("lead_domain"):
+                    out.setdefault(row["lead_domain"], []).append(row)
         return out
 
     def update_lead_outreach(self, domain: str, fields: dict[str, Any]) -> None:

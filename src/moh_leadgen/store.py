@@ -250,6 +250,14 @@ class LeadStore:
         row = self.conn.execute("select data from leads where domain=?", (domain,)).fetchone()
         return Lead.model_validate_json(row["data"]) if row else None
 
+    def updated_at(self, domain: str) -> datetime | None:
+        """When this row was last written locally (the updated_at column), or None if absent."""
+        row = self.conn.execute("select updated_at from leads where domain=?", (domain,)).fetchone()
+        return datetime.fromisoformat(row["updated_at"]) if row else None
+
+    def count(self) -> int:
+        return self.conn.execute("select count(*) from leads").fetchone()[0]
+
     def iter(
         self,
         *,
